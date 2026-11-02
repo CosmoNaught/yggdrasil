@@ -1,22 +1,12 @@
-"""Yggdrasil: a recurrent layer that retrieves its transition instead of computing it.
+"""Yggdrasil: a recurrent layer that retrieves its transition from a tree of stored leaves.
 
-Every layer l keeps a state h in R^n and a bank of leaves. Per token x_t:
-
-    r      = x_t (layer 0)  or  Tree([e(x_t); nu(h^{l-1}_t)])   (depth-D walk, node j: right iff w_j . f + b_j > 0)
-    h^l_t  = A_r h^l_{t-1} + T_r[x_t] (+ U_r W nu(h^{l-1}_t))     T_r[x] = U_r v(x) + c_r, one stored row per token
-    A_r    = diag(clip(d_r, -1, 1)) blockdiag_g(expm(S_rg / 2 - S_rg^T / 2))      rotations times decays, block b
+    h^l_t  = A_r h^l_{t-1} + T_r[x_t] + U_r W nu(h^{l-1}_t)
+    A_r    = diag(clip(d_r, -1, 1)) blockdiag(expm(S_r / 2 - S_r^T / 2))
     logits = beta + sum_l Q^l P^l_r h^l_t
 
-nu(h) = h / rms(h). The tree reads the layer below after it absorbed x_t, never the layer's own past, so within a layer
-every transition is fixed by the input: each layer is one associative scan in training, and a step reads one leaf.
-Training routes hard (one leaf, as at inference) with a straight-through beam gradient at temperature ROUTE_TAU, and
-stores each branch leaf as a sum of increments along its tree path (to_tree), folded into plain leaf tables when saved.
-
-    python models/yggdrasil/training/train.py train --task s5_word                      state tracking (s5_word a5_word parity_check
-                                                             cycle_navigation modular_arithmetic)
-    python models/yggdrasil/training/train.py train --task enwik8 --depth 12            byte-level language modelling (also: hg38, bits per base)
-    python models/yggdrasil/training/train.py train --task human_nontata_promoters      Genomic Benchmarks classification (8 datasets)
-    python models/yggdrasil/training/train.py train --task s5_word --seeds 160,161,162  one W&B sweep trial = several seeds, objective = mean
+    python models/yggdrasil/training/train.py train --task s5_word
+    python models/yggdrasil/training/train.py train --task enwik8 --depth 12
+    python models/yggdrasil/training/train.py train --task human_nontata_promoters
 """
 
 import argparse
@@ -34,10 +24,10 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
-ROOT = Path(__file__).resolve().parents[3]  # the repository (data/, results/)
+ROOT = Path(__file__).resolve().parents[3]
 LN2 = float(np.log(2.0))
-SKEW_STD = 0.05  # skew std of the first block of a leaf; the last block has std 1
-ROUTE_TAU = 0.5  # backward temperature of the straight-through routing
+SKEW_STD = 0.05  # skew init std of the first block; the last block has std 1
+ROUTE_TAU = 0.5  # straight-through routing temperature
 
 
 # ----------------------------------------------------------------------------------------------------------- model
@@ -48,12 +38,7 @@ def _normal(key, shape, scale):
 
 def init(key, vocab, classes, n=128, block=16, depth=8, layers=2, feat=16, rank=16, out_rank=8, lower_rank=16,
          shared_out=False, branch="dyn", context=1, bits=16):
-    """{"root", "branches" (layers - 1), "head_b"}. Start: d ~ U[0.6, 1] with the first block of every leaf at d = 0
-    (exact reset); skew std log-spaced 0.05 -> 1.0 over the blocks of a leaf.
-    lower_rank: rank of the input from the layer below (0 = none). shared_out: one readout per layer, not per leaf.
-    branch (ablations): "dyn" = the model; "out" = branch leaves store no transition (A_r = 0: the leaf's effect ends
-    at the token, a stored output); "tok" = the branch tree reads the token only.
-    context > 1: the root leaf is the last `context` tokens (context_leaf), min(vocab^context, 2^bits) leaves."""
+    """branch: "dyn" (default), "out" (no stored transition, A_r = 0), "tok" (tree reads the token only)."""
     assert n % block == 0 and branch in ("dyn", "out", "tok") and (branch != "tok" or feat != n)
     assert context == 1 or vocab**context < 2**32
     g = n // block
@@ -61,7 +46,7 @@ def init(key, vocab, classes, n=128, block=16, depth=8, layers=2, feat=16, rank=
     parts = []
     for i in range(layers):
         leaves = (vocab if context == 1 else min(vocab**context, 2**bits)) if i == 0 else 2**depth
-        emb = _normal(next(keys), (vocab, feat), 1.0)  # node features (drawn for the root too: fixed key order)
+        emb = _normal(next(keys), (vocab, feat), 1.0)  # drawn for the root too to keep the key order
         p = {"v_tok": _normal(next(keys), (vocab, rank), 1.0),
              "u_in": _normal(next(keys), (leaves, n, rank), 0.5 * rank**-0.5),
              "c": _normal(next(keys), (leaves, n), 0.1),
@@ -83,15 +68,13 @@ def init(key, vocab, classes, n=128, block=16, depth=8, layers=2, feat=16, rank=
             p["v_low"] = _normal(next(keys), (lower_rank, n), n**-0.5)
             p["u_low"] = jnp.zeros((leaves, n, lower_rank))
         if context > 1 and i == 0:
-            p["context"] = jnp.zeros((context, 0))  # the context length as a shape (no values, never trained)
+            p["context"] = jnp.zeros((context, 0))  # stores the context length as a shape
         parts.append(p)
     return {"root": parts[0], "branches": parts[1:], "head_b": jnp.zeros((classes,))}
 
 
 def context_leaf(xs, k, vocab, leaves, prev=None):
-    """Root leaves (T, B) of the last k tokens of xs (T, B): their base-vocab number c (the current token is the last
-    digit; tokens before the window come from prev (B, k - 1), else 0). Exact when vocab^k = leaves, else the top bits
-    of c * 2654435761 mod 2^32 (leaves = 2^bits). A step rolls c = (c mod vocab^(k - 1)) vocab + x: O(1)."""
+    """Root leaf ids (T, B) from the last k tokens; hashed to 2^bits leaves when vocab^k > leaves."""
     pad = jnp.zeros((k - 1, xs.shape[1]), xs.dtype) if prev is None else jnp.swapaxes(prev, 0, 1).astype(xs.dtype)
     full = jnp.concatenate([pad, xs]).astype(jnp.uint32)
     c = jnp.zeros(xs.shape, jnp.uint32)
@@ -103,7 +86,7 @@ def context_leaf(xs, k, vocab, leaves, prev=None):
 
 
 def _expm(sk, chunk=16384):
-    """expm of (..., b, b); in checkpointed chunks when large (peak memory O(chunk))."""
+    """expm of (..., b, b), in checkpointed chunks when large."""
     flat = sk.reshape((-1,) + sk.shape[-2:])
     if flat.shape[0] <= chunk:
         return jax.scipy.linalg.expm(sk)
@@ -114,7 +97,7 @@ def _expm(sk, chunk=16384):
 
 
 def transitions(p):
-    """A_r as blocks (leaves, n / b, b, b)."""
+    """(leaves, n / b, b, b)"""
     sk = 0.5 * (p["skew"] - jnp.swapaxes(p["skew"], -1, -2))
     return jnp.clip(p["d_raw"], -1.0, 1.0).reshape(sk.shape[:-1])[..., None] * _expm(sk)
 
@@ -131,9 +114,7 @@ def _rms(h):
 
 
 def walk(p, f, beam, tau, mode, key=None, route_noise=0.0):
-    """Beam walk: f (T, B, F) -> leaf ids (T, B, K), path weights (T, B, K). Per level, each kept path tests its node and
-    the K best children survive; slot 0 always follows the greedy path (the one the CPU walks).
-    hard: slot 0 only; st: slot 0 forward, gradient of the softmax over the beam's path log-probabilities at tau."""
+    """f (T, B, F) -> leaf ids (T, B, K), weights (T, B, K). Slot 0 is the greedy path."""
     depth = (p["w_node"].shape[0] + 1).bit_length() - 1
     beam = 1 if mode == "hard" else beam
     node = jnp.zeros(f.shape[:2] + (1,), jnp.int32)
@@ -157,36 +138,31 @@ def walk(p, f, beam, tau, mode, key=None, route_noise=0.0):
 
 
 def part(p, leaf, w, xs, low, noise, h0=None):
-    """States (T, B, n) of one layer for leaf ids / weights (T, B, K); low = nu(state below) or None (root).
-    h0: state (B, n) before the first token (None = zero)."""
+    """leaf, w (T, B, K), low (T, B, n) or None, h0 (B, n) or None -> states (T, B, n)."""
     n_leaves, n = p["c"].shape
     vocab = p["v_tok"].shape[0]
-    if n_leaves * vocab * n <= 2**28:  # the CPU table T_r[x] = U_r v(x) + c_r, gathered per token
+    if n_leaves * vocab * n <= 2**28:  # T_r[x] = U_r v(x) + c_r
         table = jnp.einsum("lkr,vr->lvk", p["u_in"], p["v_tok"]) + p["c"][:, None, :]
         drive = jnp.einsum("tbq,tbqk->tbk", w, table.reshape(-1, n)[leaf * vocab + xs[:, :, None]])
-    else:  # same values without building the table
+    else:
         drive = jnp.einsum("tbq,tbqkr,tbr->tbk", w, p["u_in"][leaf], p["v_tok"][xs]) + \
             jnp.einsum("tbq,tbqk->tbk", w, p["c"][leaf])
     if "v_low" in p:
         drive = drive + jnp.einsum("tbq,tbqkr,tbr->tbk", w, p["u_low"][leaf], low @ p["v_low"].T)
     if noise is not None:
         drive = drive + noise
-    if "skew" not in p:  # branch "out": no stored transition, the state is the drive alone
+    if "skew" not in p:  # branch "out"
         return drive
     abar = jnp.einsum("tbq,tbq...->tb...", w, transitions(p)[leaf])
     shape, drive = drive.shape, drive.reshape(abar.shape[:-1])
-    if h0 is not None:  # h_1 = A_1 h0 + b_1: fold the carried state into the first drive
+    if h0 is not None:  # fold A_1 h0 into the first drive
         drive = drive.at[0].add(jnp.einsum("b...ij,b...j->b...i", abar[0], h0.reshape(drive.shape[1:])))
     return _scan(abar, drive).reshape(shape)
 
 
 def forward(params, tokens, beam=8, tau=ROUTE_TAU, mode="hard", key=None, route_noise=0.0, noise_std=0.0, state=None,
             return_state=False, prev=None):
-    """tokens (B, T) int -> log-probs (B, T, classes). mode: "hard" = the CPU path (one leaf per token and layer),
-    "st" = hard forward with beam gradient (training). key: training noise (None = none).
-    state: list of per-layer states (B, n) before the first token (None = zeros); return_state: also return the
-    per-layer states after the last token (streaming evaluation: carry them into the next chunk).
-    prev: the k - 1 tokens (B, k - 1) before the window for a context root (None = zeros)."""
+    """tokens (B, T) -> log-probs (B, T, classes). mode: "hard" or "st" (straight-through beam gradient)."""
     xs = jnp.swapaxes(tokens, 0, 1)
     parts = [params["root"]] + [leaf_table(p) for p in params["branches"]]
     low, logits, last = None, params["head_b"], []
@@ -195,7 +171,7 @@ def forward(params, tokens, beam=8, tau=ROUTE_TAU, mode="hard", key=None, route_
         noise = None
         if pkey is not None and noise_std > 0:
             noise = noise_std * jax.random.normal(jax.random.fold_in(pkey, 2), xs.shape + p["c"].shape[-1:])
-        if i == 0:  # root: leaf = token (or the last k tokens: context_leaf), weight 1
+        if i == 0:  # root leaf = token
             leaf = xs if "context" not in p else \
                 context_leaf(xs, p["context"].shape[0], p["v_tok"].shape[0], p["c"].shape[0], prev)
             leaf, w = leaf[:, :, None], jnp.ones(xs.shape + (1,), jnp.float32)
@@ -229,7 +205,7 @@ def _even(q):
 
 
 class Group:
-    """Word problem (Merrill et al. 2024; Grazzi et al. 2025): label at t = running product x_1 ... x_t."""
+    """Word problem: label at t = x_1 ... x_t."""
 
     def __init__(self, table):
         self.table, self.vocab = table, len(table)
@@ -261,8 +237,7 @@ class Cycle:
 
 
 class ModArith:
-    """Delétang et al. 2023: residues 0..4 alternating with + - * (tokens 5..7), * before + and -, mod 5; labelled at
-    odd prefix lengths (after each residue)."""
+    """Residues 0..4 alternating with + - * (tokens 5..7), mod 5, labelled after each residue."""
     vocab, classes = 8, 5
 
     def sample(self, rng, batch, length):
@@ -299,9 +274,6 @@ N_EVAL, EVAL_CHUNK = 512, 128
 
 
 class StateTask:
-    """Train on length train_len with the loss on every labelled prefix; evaluate 512 sequences of length eval_len
-    (sequence accuracy = every label up to L correct, Grazzi et al.). Streams: val (seed 20000 + s) selects the
-    checkpoint, test (seed 10000 + s) is reported."""
 
     def __init__(self, name, seed):
         make, self.train_len, self.eval_len = STATE_TASKS[name]
@@ -315,16 +287,10 @@ class StateTask:
         return x, y, valid.astype(np.float32)
 
     def carry_batch(self, rng, size, frac):
-        """State passing (Buitrago Ruiz & Gu 2025; training only): (x, y, mask, prefix, use). A fraction `frac` of the
-        rows (use = 1) start from the state after `prefix`: prefix and x are consecutive chunks of one stream of length
-        2L, so the labels of x are the true labels of the whole stream (running product; for modular arithmetic the
-        value of the whole expression, whose second chunk starts at an even position, i.e. with a residue). This is
-        truncated BPTT over a stream twice the training length. Rows with use = 0 are fresh sequences from a zero
-        state. (A prefix from an unrelated example would be ill-posed for modular arithmetic: the task has no
-        start-of-expression token, so nothing in the input says that the carried state must be discarded.)"""
+        """(x, y, mask, prefix, use); rows with use = 1 continue the stream that `prefix` starts."""
         L = self.train_len
         use = (rng.random(size) < frac).astype(np.float32)
-        x, y, valid = self.gen.sample(rng, size, L)  # zero-start rows
+        x, y, valid = self.gen.sample(rng, size, L)
         sx, sy, sv = self.gen.sample(rng, size, 2 * L)
         prefix = sx[:, :L]
         pick = use[:, None] > 0
@@ -332,7 +298,7 @@ class StateTask:
         return x, y, valid.astype(np.float32), prefix, use
 
     def evaluate(self, predict, params, split):
-        """Sequence accuracy per length (hard path)."""
+        """Sequence accuracy per length."""
         x, y, valid = self.sets[split]
         pred = np.concatenate([np.asarray(predict(params, x[i:i + EVAL_CHUNK])) for i in range(0, len(x), EVAL_CHUNK)])
         ok = np.cumprod(np.where(valid, pred == y, True), axis=1)
@@ -340,21 +306,19 @@ class StateTask:
 
 
 class LMTask:
-    """Next-token bits per token with a zero state per window (training: --carry starts some windows from the state
-    after the preceding window). enwik8: raw bytes, standard 90M / 5M / 5M split.
-    hg38: the HyenaDNA / Basenji interval split (data/hg38, scripts/prepare_genomics.py), bits per nucleotide."""
+    """Next-token bits per token. enwik8: 90M / 5M / 5M split; hg38: HyenaDNA split."""
     higher = False
 
     def __init__(self, name, cfg):
         if name == "enwik8":
             raw = np.frombuffer((ROOT / "data" / name).read_bytes(), np.uint8)
             self.train, val, test = raw[:90_000_000], raw[90_000_000:95_000_000], raw[95_000_000:]
-        else:  # memory-mapped splits (train is 4.46 G tokens)
+        else:
             self.train, val, test = (np.memmap(ROOT / "data" / name / f"{s}.u8", np.uint8, "r")
                                      for s in ("train", "valid", "test"))
         self.vocab = self.classes = LM_TASKS[name]
         self.T = cfg.T
-        self.streams = {"val": val, "test": test}  # raw splits (streaming evaluation)
+        self.streams = {"val": val, "test": test}
         self.sets = {"val": self._windows(val, cfg.val_windows), "test": self._windows(test, cfg.test_chars // cfg.T)}
 
     def _windows(self, ids, m):
@@ -367,10 +331,7 @@ class LMTask:
         return self.train[idx].astype(np.int32), self.train[idx + 1].astype(np.int32), np.ones((size, self.T), np.float32)
 
     def carry_batch(self, rng, size, frac):
-        """State passing (training only): (x, y, mask, prefix, use). Every row is a window train[i:i + T] at a random
-        i >= T; prefix = the preceding window train[i - T:i]. On a fraction `frac` of the rows (use = 1) the window
-        starts from the (stopped) state after its prefix: truncated BPTT over the stream. Rows with use = 0 start from
-        zero. Labels are the next tokens."""
+        """(x, y, mask, prefix, use); prefix is the preceding window."""
         use = (rng.random(size) < frac).astype(np.float32)
         idx = rng.integers(self.T, len(self.train) - self.T - 1, size)[:, None] + np.arange(self.T)[None]
         x, y, prefix = (self.train[idx + k].astype(np.int32) for k in (0, 1, -self.T))
@@ -382,9 +343,7 @@ class LMTask:
         return nll / y.size / LN2
 
     def evaluate_stream(self, params, split, chunk=16384, limit=0):
-        """Bits per token over the WHOLE split as one stream: zero state before the first byte, every later token
-        conditioned on all earlier ones (hard routing). Batch 1, chunks of `chunk` tokens, the per-layer states carried
-        from one chunk to the next. limit > 0: only the first `limit` predicted tokens of the split."""
+        """Bits per token over the split as one stream, states carried across chunks."""
         ids = self.streams[split]
         if limit > 0:
             ids = ids[:limit + 1]
@@ -397,7 +356,7 @@ class LMTask:
             x = np.asarray(ids[i:j], np.int32)[None]
             y = np.asarray(ids[i + 1:j + 1], np.int32)[None]
             prev = None
-            if "context" in params["root"]:  # the tokens before the chunk (zeros before the first token)
+            if "context" in params["root"]:
                 k = params["root"]["context"].shape[0]
                 prev = np.concatenate([np.zeros(k - 1, np.int32), np.asarray(ids[max(0, i - k + 1):i], np.int32)])
                 prev = prev[-(k - 1):][None]
@@ -408,15 +367,13 @@ class LMTask:
 
 @jax.jit
 def _stream_nll(params, x, y, state, prev=None):
-    """-sum log p(y) of one chunk (1, C) from `state` (prev: the tokens before it); returns the states after it."""
+    """x, y (1, C) -> (-sum log p(y), states after the chunk)."""
     logp, last = forward(params, x, mode="hard", state=state, return_state=True, prev=prev)
     return -jnp.take_along_axis(logp, y[..., None], -1).sum(), last
 
 
 class ClfTask:
-    """Genomic Benchmarks (Gresova et al. 2023): label read out at the last base of each sequence (tokens A C G T N =
-    0..4, pad 5 after the end; the model is causal, so padding never reaches the read-out). Official test split;
-    validation = a seeded 10% of the train split (as Caduceus). Score = top-1 accuracy."""
+    """Genomic Benchmarks: label read at the last base. Tokens A C G T N = 0..4, pad = 5."""
     higher, vocab = True, 6
 
     def __init__(self, name, seed):
@@ -430,7 +387,7 @@ class ClfTask:
         self.train = pick(tr, perm[cut:])
 
     @staticmethod
-    def _crop(x, lengths):  # crop to the longest sequence, rounded up to 64 (few compiled shapes)
+    def _crop(x, lengths):  # round up to 64 to limit recompiles
         return x[:, :min(x.shape[1], -(-int(lengths.max()) // 64) * 64)]
 
     def batch(self, rng, size):
@@ -457,11 +414,7 @@ LEAF_KEYS = ("u_in", "c", "p_out", "skew", "d_raw", "u_low")
 
 
 def to_tree(p, depth):
-    """Branch leaf parameters as a tree of increments (path sums: UltraFastBERT, Belcak & Wattenhofer 2023; hierarchical
-    shrinkage, Agarwal et al. 2022): leaf j = (D + 1)^-1/2 times the sum of the terms of the D + 1 nodes on its
-    root-to-leaf path, levels stored as arrays of 2^d rows. The top node holds the single-leaf init and every deeper
-    term starts at zero, so the layer starts as one shared leaf and the leaves differ only where training splits them.
-    A reparameterisation only: any leaf table is reachable, and the saved model is the summed table."""
+    """Leaf j = (D + 1)^-1/2 * sum of the increments on its root-to-leaf path; deeper levels start at zero."""
     sc = (depth + 1) ** -0.5
     levels = {k: [p[k][:1] / sc] + [jnp.zeros((2**d,) + p[k].shape[1:], p[k].dtype) for d in range(1, depth + 1)]
               for k in LEAF_KEYS if k in p}
@@ -469,7 +422,7 @@ def to_tree(p, depth):
 
 
 def leaf_table(p):
-    """Tree of increments -> the per-leaf arrays (identity for a branch already folded)."""
+    """Tree of increments -> per-leaf arrays."""
     if "levels" not in p:
         return p
     out = {k: v for k, v in p.items() if k != "levels"}
@@ -480,7 +433,6 @@ def leaf_table(p):
 
 
 def fold_tree(params):
-    """The summed leaf tables (the saved model has the usual arrays)."""
     return dict(params, branches=[leaf_table(p) for p in params["branches"]])
 
 
@@ -506,7 +458,7 @@ def train(cfg):
 
     def loss_fn(p, x, y, m, key, prefix=None, use=None):
         state = None
-        if prefix is not None:  # --carry: start from the (stopped) state after the prefix, on rows with use = 1
+        if prefix is not None:
             last = forward(p, prefix, cfg.beam, ROUTE_TAU, "st", jax.random.fold_in(key, 7), cfg.route_noise,
                            cfg.state_noise, return_state=True)[1]
             state = [jax.lax.stop_gradient(h) * use[:, None] for h in last]
@@ -517,7 +469,7 @@ def train(cfg):
     def step(p, s, x, y, m, key, prefix=None, use=None):
         ce, g = jax.value_and_grad(loss_fn)(p, x, y, m, key, prefix, use)
         u, s = opt.update(g, s, p)
-        if cfg.branch_lr != 1.0:  # branch updates scaled after Adam
+        if cfg.branch_lr != 1.0:
             u = dict(u, branches=jax.tree_util.tree_map(lambda v: v * cfg.branch_lr, u["branches"]))
         return optax.apply_updates(p, u), s, ce
 
@@ -550,7 +502,7 @@ def train(cfg):
         if lm:
             rec["val_bpc"] = val = task.evaluate(nll, params, "val")
             better = val < best["val"]
-            if cfg.stream_val > 0:  # the first stream_val tokens of the validation split as one stream (not selection)
+            if cfg.stream_val > 0:
                 rec["val_stream"] = task.evaluate_stream(params, "val", cfg.stream_chunk, cfg.stream_val)[0]
         elif cfg.task in CLF_TASKS:
             rec["val_acc"] = val = task.evaluate(predict, params, "val")
@@ -571,12 +523,12 @@ def train(cfg):
     res = {"config": vars(cfg), "name": name, "n_params": n_params, "log": log, "best_step": best.get("step"),
            "best_val": best["val"], "train_s": round(time.time() - t0, 1),
            "code_md5": hashlib.md5(Path(__file__).read_bytes()).hexdigest()}
-    if "val_stream" in best:  # validation stream at the best checkpoint
+    if "val_stream" in best:
         res["val_stream"] = best["val_stream"]
-    if "params" in best:  # test at the best-validation checkpoint (the reported number)
+    if "params" in best:
         res["test"] = task.evaluate(nll if lm else predict, best["params"], "test")
         save(out.with_suffix(".npz"), fold_tree(best["params"]))
-        if lm and cfg.stream_test:  # the final protocol: the full test split as one stream
+        if lm and cfg.stream_test:
             res["test_stream"], res["test_stream_tokens"] = task.evaluate_stream(best["params"], "test",
                                                                                   cfg.stream_chunk)
     out.with_suffix(".json").write_text(json.dumps(res))
@@ -593,14 +545,12 @@ def train(cfg):
 
 
 def trial(cfg, argv):
-    """One W&B sweep trial: one process per (task, seed) on this GPU. Score of a task = mean over seeds of the best
-    validation value (state: sequence accuracy at the test length; LM: bits per byte, negated so higher is better);
-    objective = the worst task's score (--tasks s5_word,modular_arithmetic: one setting must pass both)."""
+    """W&B sweep trial: one process per (task, seed); objective = min over tasks of the mean best val."""
     import wandb
     wb = wandb.init()
     seeds = cfg.seeds.split(",")
     names = cfg.tasks.split(",") if cfg.tasks else [cfg.task]
-    rest, skip = [], False  # argv without the command, --seeds, --tasks and --task
+    rest, skip = [], False
     for a in argv[1:]:
         if skip or a.split("=")[0] in ("--seeds", "--tasks", "--task"):
             skip = a in ("--seeds", "--tasks", "--task")
@@ -634,9 +584,7 @@ def trial(cfg, argv):
 
 
 def sweep(path):
-    """Create one W&B sweep (method: bayes default, or grid) per entry of `variants` in a YAML config (keys: project,
-    method, run_cap, fixed, search,
-    variants: {name: overrides}); prints the sweep paths. Search values: list, or {log_uniform: [lo, hi]}."""
+    """Create one W&B sweep per entry of `variants` in a YAML config."""
     import wandb
     import yaml
     cfg = yaml.safe_load(Path(path).read_text())
@@ -661,45 +609,37 @@ def parser():
     ap.add_argument("config", nargs="?", help="sweep: YAML config")
     add = ap.add_argument
     add("--task", choices=[*STATE_TASKS, *LM_TASKS, *CLF_TASKS])
-    add("--tasks", default="", help="W&B trial over several tasks (comma list); objective = the worst task's score")
+    add("--tasks", default="", help="comma list")
     add("--seed", type=int, default=0)
-    add("--seeds", default="", help="comma list: run one process per seed and report the mean (W&B sweep trial)")
-    # model
+    add("--seeds", default="", help="comma list")
     add("--layers", type=int, default=2)
     add("--n", type=int, default=128)
     add("--block", type=int, default=16)
     add("--depth", type=int, default=8)
     add("--feat", type=int, default=16)
-    add("--rank", type=int, default=16, help="rank of the token input map U_r v(x)")
+    add("--rank", type=int, default=16)
     add("--out_rank", type=int, default=8)
     add("--lower_rank", type=int, default=16)
     add("--shared_out", type=_flag, default=False)
     add("--branch", default="dyn", choices=["dyn", "out", "tok"])
-    add("--context_len", type=int, default=1, help="root leaf = the last k tokens (1: the token)")
-    add("--context_bits", type=int, default=16, help="context root: at most 2^bits leaves (hashed when "
-        "vocab^k is larger)")
-    # training
+    add("--context_len", type=int, default=1)
+    add("--context_bits", type=int, default=16)
     add("--steps", type=int, default=40_000)
     add("--batch", type=int, default=256)
-    add("--T", type=int, default=256, help="LM window length")
+    add("--T", type=int, default=256)
     add("--lr", type=float, default=1e-3)
     add("--branch_lr", type=float, default=1.0)
     add("--beam", type=int, default=8)
-    add("--route_noise", type=float, default=0.05, help="logistic noise on the node tests (training)")
-    add("--state_noise", type=float, default=0.0, help="Gaussian noise on each layer's input drive (training)")
-    add("--carry", type=float, default=0.0, help="state and LM tasks: fraction of training sequences that start "
-        "from a carried state (state passing; LM: the state after the preceding window of the stream; training only)")
-    add("--warmup_frac", type=float, default=None,
-        help="LR warmup as a fraction of --steps (default: min(1000, steps // 10), i.e. 10%% at 10k steps)")
-    # evaluation / output
+    add("--route_noise", type=float, default=0.05)
+    add("--state_noise", type=float, default=0.0)
+    add("--carry", type=float, default=0.0, help="fraction of rows with a carried state")
+    add("--warmup_frac", type=float, default=None)
     add("--eval_every", type=int, default=4_000)
     add("--val_windows", type=int, default=512)
     add("--test_chars", type=int, default=5_000_000)
-    add("--stream_test", type=_flag, default=False,
-        help="LM: also score the full test split as one stream (state carried from a zero start): json 'test_stream'")
-    add("--stream_chunk", type=int, default=16384, help="tokens per chunk of the streaming test (batch 1)")
-    add("--stream_val", type=int, default=0, help="LM, > 0: at each evaluation also score the first N tokens of the "
-        "validation split as one stream (json 'val_stream' at the best checkpoint; selection stays on val_bpc)")
+    add("--stream_test", type=_flag, default=False)
+    add("--stream_chunk", type=int, default=16384)
+    add("--stream_val", type=int, default=0)
     add("--out", default=str(ROOT / "results"))
     add("--tag", default="")
     add("--wandb", type=_flag, default=False)

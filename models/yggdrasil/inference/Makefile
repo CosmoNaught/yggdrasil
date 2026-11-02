@@ -1,8 +1,7 @@
-# ygg: the AVX-512 VNNI kernel (build on the Sapphire Rapids nodes, or anywhere g++ knows the target).
-# ygg_simde: portable SIMDe build (exact integer / IEEE semantics, for correctness on hosts without AVX-512; not for timing).
+# ygg: AVX-512 VNNI build. ygg_simde: portable SIMDe build, same results, not for timing.
 CXX ?= g++
 FLAGS = -O3 -std=c++17 -ffp-contract=off -Wall
-SIMDE ?= simde  # a checkout of https://github.com/simd-everywhere/simde
+SIMDE ?= simde  # path to https://github.com/simd-everywhere/simde
 
 ygg: ygg.cpp
 	$(CXX) $(FLAGS) -march=sapphirerapids -o $@ $<

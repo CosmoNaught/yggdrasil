@@ -1,18 +1,4 @@
-"""Gated DeltaNet training.
-
-Source: flash-linear-attention 0.5.2 (pip flash-linear-attention==0.5.2, fla-core==0.5.2),
-https://github.com/fla-org/flash-linear-attention (MIT), which hosts the authors' Gated DeltaNet (Yang, Kautz and
-Hatamizadeh, ICLR 2025) with its Triton chunk kernels. Used unchanged: fla.models.GatedDeltaNetForCausalLM.
-Settings: --heads heads of --head_dim (default d / head_dim; fla takes them independently of d), value expansion
---expand_v, output gate, short convolutions of width 4, SwiGLU MLP of hidden ratio 4 (width --ff when given, else
-the library's rounding to 256), RMSNorm eps 1e-6, untied head, unfused norms and loss. fp32.
-Eigenvalue range (--allow_neg_eigval, default by task): on the state tasks True, beta in (0, 2) and transition
-eigenvalues in [-1, 1], the state-tracking variant of Grazzi et al. 2025; on enwik8 and hg38 False, eigenvalues in
-[0, 1], the fla default and the setting of the Gated DeltaNet paper's language-model experiments.
-
-    python models/gated_deltanet/training/train.py --task <task> --d <width> --layers <layers> --head_dim <head_dim> --lr <lr> --seed <seed>
-
-"""
+"""Gated DeltaNet LM using fla.models.GatedDeltaNetForCausalLM (flash-linear-attention 0.5.2, MIT)."""
 import sys
 from pathlib import Path
 
@@ -57,7 +43,7 @@ class GatedDeltaNetLM(nn.Module):
 
 
 def build(cfg, vocab, classes):
-    if getattr(cfg, "allow_neg_eigval", None) is None:  # resolved by task; stored in the checkpoint config
+    if getattr(cfg, "allow_neg_eigval", None) is None:  # [-1, 1] eigenvalues on state tasks
         cfg.allow_neg_eigval = cfg.task not in ("enwik8", "hg38")
     heads = getattr(cfg, "heads", None)
     if heads is None and cfg.d % cfg.head_dim:

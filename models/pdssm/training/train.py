@@ -1,18 +1,4 @@
-"""PD-SSM training.
-
-Source: the authors' code for Terzic et al., "Structured Sparse Transition Matrices to Enable State Tracking in
-State-Space Models" (NeurIPS 2025), https://github.com/IBM/expressive-sparse-state-space-model at commit
-8682e78101be84f67ceb64702855e5d9e820f7d2 (Apache-2.0), vendored unmodified in
-third_party/expressive-sparse-state-space-model/ (LICENSE there). Module state_tracking_PyTorch/models/pdssm.py class
-PD, built as in their state_tracking_PyTorch/train.py: embedding size = --d, state size = --state (default --d, as in
-their script), return_all_outputs=True, --layers blocks, their defaults otherwise (dictionary 8, dropout 0.01).
-PD already holds a standard token embedding (nn.Embedding) and a linear readout around the PD blocks, so the same
-untouched class serves the language-model tasks (enwik8, hg38) and the state tasks. Their recurrence is a plain PyTorch
-loop over time; no custom kernels.
-
-    python models/pdssm/training/train.py --task <task> --d <width> --layers <layers> [--state <state>] --lr <lr> --seed <seed>
-
-"""
+"""PD-SSM (Terzic et al., NeurIPS 2025) from IBM/expressive-sparse-state-space-model (Apache-2.0), vendored in third_party/."""
 import importlib.util
 import sys
 from pathlib import Path

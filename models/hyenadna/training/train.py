@@ -1,20 +1,4 @@
-"""HyenaDNA training (from scratch).
-
-Source: the HyenaDNA authors' Hugging Face port of their model (Nguyen et al., "HyenaDNA: Long-Range Genomic Sequence
-Modeling at Single Nucleotide Resolution", NeurIPS 2023; https://github.com/HazyResearch/hyena-dna at commit
-d553021b483b82980aa4b868b37ec2d4332e198a), files modeling_hyena.py and configuration_hyena.py of
-https://huggingface.co/LongSafari/hyenadna-tiny-1k-seqlen-hf at revision e8c1effa8673814e257e627d2e1eda9ea5a373f6
-(BSD-3-Clause, model card in third_party/hyenadna_hf/MODEL_CARD.md; the same files in the small-32k and medium-160k
-repos), vendored unmodified in third_party/hyenadna_hf/. Long convolutions by torch.fft (the port has no fused
-kernel). Used: HyenaDNAForCausalLM from HyenaConfig, trained from scratch (no pretrained weights); only the training
-loop (shared/trainer.py) is ours.
-Settings: d_model --d, --layers, d_inner 4 d, Hyena order 2, filter order --filter_order (64), short filter 3,
-positional embedding size 5, filter sine frequency 10, embedding dropout 0.1 (all as the tiny-1k checkpoint),
-max_seq_len = the longest training or evaluation sequence + 2.
-
-    python models/hyenadna/training/train.py --task <task> --d <width> --layers <layers> --filter_order <order> --lr <lr> --seed <seed>
-
-"""
+"""HyenaDNA (Nguyen et al., NeurIPS 2023), HF port LongSafari/hyenadna-tiny-1k-seqlen-hf (BSD-3-Clause), vendored in third_party/hyenadna_hf/."""
 import importlib
 import sys
 from pathlib import Path

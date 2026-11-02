@@ -1,8 +1,18 @@
 # Yggdrasil
 
-A recurrent layer that looks up its transition instead of computing it. Each layer stores a bank of transitions; a
-binary tree, routed on the token and the state of the layer below, picks one leaf per token. Training is a parallel
-scan over time; inference reads one leaf per layer per token, in an int8 CPU kernel.
+Sequence models that run token by token on a CPU read every weight at every step. Bigger means slower.
+
+Most of those weights do nothing for any one token.
+
+Yggdrasil stores a bank of transitions per layer and reads **one per token**, picked by a small binary tree. A
+195M-parameter model reads **0.2%** of its weights per token, trains in parallel like a linear RNN, and runs in an int8
+CPU kernel.
+
+- **1.555 bpc on enwik8** vs 1.719 for the best baseline at the same active parameters
+- **1.567 bits/base on hg38** vs 1.637, beating HyenaDNA, Mamba-2 and the Transformer
+- **6.7 µs per token** on one CPU core: **4×** faster than GRU, **27×** faster than a Transformer
+- **178× to 3,782×** faster than dense models of the same size
+- **1.000 on all five state-tracking tasks**, including S5 and A5, where every other parallel model scores 0.000
 
 <p align="center"><img src="assets/architecture.png" width="520"></p>
 

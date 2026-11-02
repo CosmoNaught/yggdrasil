@@ -1,15 +1,4 @@
-"""Mamba-2 training.
-
-Source: the authors' package mamba_ssm 2.3.0 (pip mamba-ssm==2.3.0, causal-conv1d==1.6.0),
-https://github.com/state-spaces/mamba (Apache-2.0), with its CUDA / Triton kernels (fused SSD chunk scan, causal conv1d,
-fused add + RMSNorm). Used unchanged: mamba_ssm.models.mixer_seq_simple.MambaLMHeadModel with Mamba2 mixers.
-Settings: expand 2, d_conv 4, ngroups 1, no MLP (d_intermediate 0), RMSNorm, fp32 residual, fused add-norm, untied
-head, vocabulary padded to a multiple of 8 by the package (logits sliced to the classes).
-Package constraints: 2 d divisible by --head_dim, (2 d + 2 --state) a multiple of 8, head_dim <= d / 4.
-
-    python models/mamba2/training/train.py --task <task> --d <width> --layers <layers> --state <d_state> --head_dim <head_dim> --lr <lr> --seed <seed>
-
-"""
+"""Mamba-2 language model on mamba_ssm 2.3.0 (github.com/state-spaces/mamba, Apache-2.0)."""
 import sys
 from pathlib import Path
 
@@ -22,6 +11,7 @@ import torch.nn as nn  # noqa: E402
 
 
 def add_args(ap):
+    # Requires 2 * d % head_dim == 0, (2 * d + 2 * state) % 8 == 0, head_dim <= d / 4
     ap.add_argument("--d", type=int, default=128)
     ap.add_argument("--layers", type=int, default=2)
     ap.add_argument("--state", type=int, default=64, help="d_state")
@@ -43,7 +33,7 @@ class Mamba2LM(nn.Module):
         self.model = MambaLMHeadModel(cfg)
 
     def forward(self, tokens):
-        return self.model(tokens).logits[..., :self.classes]
+        return self.model(tokens).logits[..., :self.classes]  # drop vocab padding
 
 
 def build(cfg, vocab, classes):

@@ -1,10 +1,7 @@
 #!/bin/bash
-# Builds the Python environments of shared/env.py with uv from shared/requirements/<name>.txt.
-#   bash shared/setup_envs.sh                  all four: jax torch flashattn infer
-#   bash shared/setup_envs.sh torch infer      only these
-#   YGG_VENVS=<dir> bash shared/setup_envs.sh  build under <dir> instead of <repo>/.venvs
-# torch.txt and flashattn.txt pull CUDA 12.8 wheels (--extra-index-url .../whl/cu128); infer.txt pulls the CPU build
-# (.../whl/cpu). Edit those lines for another CUDA version. mamba-ssm and causal-conv1d build against the installed torch.
+# Build the environments of shared/env.py with uv.
+#   bash shared/setup_envs.sh [jax] [torch] [flashattn] [infer]
+# Wheels target CUDA 12.8; edit --extra-index-url in shared/requirements/*.txt for another version.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 VENVS=${YGG_VENVS:-$ROOT/.venvs}

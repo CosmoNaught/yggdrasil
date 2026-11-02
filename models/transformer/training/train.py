@@ -1,19 +1,5 @@
-"""Transformer training.
-
-Model: Hugging Face transformers LlamaForCausalLM 4.57.6 (https://github.com/huggingface/transformers), unmodified;
-attention: flash-attn 2.8.3.post2 (https://github.com/Dao-AILab/flash-attention) through
-attn_implementation="flash_attention_2" (--attn sdpa selects PyTorch SDPA, the same model).
-Environment: the "flashattn" venv of env.py, shared/requirements/flashattn.txt (torch 2.8.0+cu128; flash-attn has no
-official wheel for torch 2.10).
-Configuration: a standard GPT-style decoder: token embedding, --layers pre-RMSNorm blocks (eps 1e-5) of causal
-multi-head attention (heads = d / --head_dim, no grouped keys) with rotary position embeddings (RoPE, base 1e4) and a
-SwiGLU MLP of width ceil(8 d / 3 / 32) * 32, final RMSNorm, untied linear head, no biases, no dropout, init normal(0.02).
-FlashAttention runs in half precision, so training and evaluation run under bf16 autocast (fp32 weights and Adam
-state, logits and loss in fp32).
-
-    python models/transformer/training/train.py --task <task> --d <width> --layers <layers> --head_dim <head_dim> --lr <lr> --seed <seed>
-
-"""
+"""Llama-style decoder baseline: pre-RMSNorm, RoPE, SwiGLU, untied head."""
+# Upstream: transformers 4.57.6 LlamaForCausalLM (Apache-2.0) with flash-attn 2.8.3.post2 (BSD-3-Clause), unmodified.
 import math
 import sys
 from pathlib import Path

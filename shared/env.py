@@ -1,14 +1,6 @@
-"""Python environments of the training and timing scripts. use(name) re-executes the calling script with that
-environment's interpreter when it runs under another one, so `python models/<model>/training/train.py ...` works
-from any Python.
+"""Per-model Python environments. use(name) re-executes the script under <repo>/.venvs/<name> (or $YGG_VENVS/<name>).
 
-Environments live in <repo>/.venvs/<name> (or $YGG_VENVS/<name>) and are built by shared/setup_envs.sh from
-shared/requirements/<name>.txt:
-
-  jax         Yggdrasil (models/yggdrasil)
-  torch       every baseline except the Transformer
-  flashattn   the Transformer (flash-attn has no wheel for the torch of the torch environment)
-  infer       int8 export and checks (models/yggdrasil/inference)
+Built by shared/setup_envs.sh: jax (Yggdrasil), torch (baselines), flashattn (Transformer), infer (int8 export).
 """
 import os
 import sys

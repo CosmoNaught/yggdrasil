@@ -1,9 +1,8 @@
-"""Float (models/yggdrasil/training/train.py forward, hard mode) against the int8 kernel (ygg.cpp) on models/yggdrasil/training/train.py's test windows.
+"""Compare the float model (hard routing) with the int8 kernel on the test windows.
 
-    python models/yggdrasil/inference/check.py --npz results/<run>.npz --model model.bin [--ygg models/yggdrasil/inference/ygg] [--test_chars 65536] [--int_ref]
+    python check.py --npz results/<run>.npz --model model.bin [--ygg ./ygg] [--test_chars N] [--int_ref]
 
-Test windows as models/yggdrasil/training/train.py LMTask: test split, T and test_chars from the checkpoint's .json, zero state per window.
---int_ref: also the bit-exact NumPy model of the kernel (export.int_forward): its bpc and the max logit difference.
+--int_ref also runs export.int_forward and reports its max logit difference to the kernel.
 """
 import argparse
 import json
@@ -24,7 +23,7 @@ LN2 = np.log(2.0)
 
 
 def float_bpc(P, x, y):
-    """models/yggdrasil/training/train.py's test number: -sum log p(y) under forward(mode="hard"), in chunks of 64 windows."""
+    """Bits per token under train.forward(mode="hard")."""
     import jax
     import jax.numpy as jnp
     import train as main
@@ -58,7 +57,7 @@ def main_():
     res["diff"] = res["bpc_int8"] - res["bpc_float"]
     if a.int_ref:
         ex = json.loads(Path(a.model + ".json").read_text())
-        Qs = E.quantize(E.hard_layers(P), ex["stats"], ex["hmargin"], ex.get("state_scale") == "group")  # the exported model
+        Qs = E.quantize(E.hard_layers(P), ex["stats"], ex["hmargin"], ex.get("state_scale") == "group")
         lr = np.concatenate([E.int_forward(Qs, P["head_b"], x[i:i + 64]) for i in range(0, len(x), 64)])
         res["bpc_int8_numpy"] = E.bpc(lr, y)
         res["max_abs_logit_kernel_vs_numpy"] = float(np.abs(lr - li).max())

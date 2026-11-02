@@ -1,7 +1,6 @@
-"""Tasks and evaluation of models/yggdrasil/training/train.py, numpy only (models/yggdrasil/training/train.py imports JAX at the top, so it cannot be imported
-from the PyTorch venv). The block between the COPY markers is models/yggdrasil/training/train.py lines 201-283 verbatim (generators, task table,
-SEQ_LENGTHS, N_EVAL, EVAL_CHUNK); StateTask and LMTask repeat models/yggdrasil/training/train.py's classes with the model call left to the
-caller. check_protocol.py (run with the JAX venv) asserts that every train batch, val set and test set equals models/yggdrasil/training/train.py's.
+"""Synthetic state-tracking tasks and enwik8 evaluation (numpy only).
+
+Mirrors the task code in models/yggdrasil/training/train.py; keep the two in sync.
 """
 import itertools
 from pathlib import Path
@@ -11,7 +10,7 @@ import numpy as np
 YGG = Path(__file__).resolve().parents[1]
 LN2 = float(np.log(2.0))
 
-# ---- COPY of models/yggdrasil/training/train.py lines 201-283 (do not edit) ----
+# Shared with models/yggdrasil/training/train.py
 def _perm_table(perms):
     index = {q: i for i, q in enumerate(perms)}
     return np.array([[index[tuple(b[a[j]] for j in range(5))] for b in perms] for a in perms], np.int32)
@@ -28,7 +27,7 @@ def _even(q):
 
 
 class Group:
-    """Word problem (Merrill et al. 2024; Grazzi et al. 2025): label at t = running product x_1 ... x_t."""
+    """Group word problem: label at t is the product x_1 ... x_t."""
 
     def __init__(self, table):
         self.table, self.vocab = table, len(table)
@@ -60,8 +59,7 @@ class Cycle:
 
 
 class ModArith:
-    """Delétang et al. 2023: residues 0..4 alternating with + - * (tokens 5..7), * before + and -, mod 5; labelled at
-    odd prefix lengths (after each residue)."""
+    """Residues 0..4 alternating with + - * (tokens 5..7), evaluated mod 5 with precedence; labels after each residue."""
     vocab, classes = 8, 5
 
     def sample(self, rng, batch, length):
@@ -95,12 +93,10 @@ CLF_TASKS = {"dummy_mouse_enhancers_ensembl": 2, "demo_coding_vs_intergenomic_se
              "human_nontata_promoters": 2, "human_ocr_ensembl": 2}  # Genomic Benchmarks: name: classes
 SEQ_LENGTHS = (32, 64, 128, 256, 500)
 N_EVAL, EVAL_CHUNK = 512, 128
-# ---- end COPY ----
 
 
 class StateTask:
-    """models/yggdrasil/training/train.py StateTask: train on length train_len with the loss on every labelled prefix; 512 val (seed 20000 + s)
-    and 512 test (seed 10000 + s) sequences of length eval_len; sequence accuracy = every label up to L correct."""
+    """Train at train_len, evaluate sequence accuracy up to eval_len on fixed val/test sets."""
 
     def __init__(self, name, seed):
         make, self.train_len, self.eval_len = STATE_TASKS[name]
@@ -114,7 +110,7 @@ class StateTask:
         return x, y, valid.astype(np.float32)
 
     def evaluate(self, predict, split, chunk=EVAL_CHUNK):
-        """predict(x int (b, L)) -> argmax labels (b, L) numpy. Returns {str(L): sequence accuracy}."""
+        """predict: (b, L) tokens -> (b, L) labels. Returns {str(L): accuracy}."""
         x, y, valid = self.sets[split]
         pred = np.concatenate([np.asarray(predict(x[i:i + chunk])) for i in range(0, len(x), chunk)])
         ok = np.cumprod(np.where(valid, pred == y, True), axis=1)
@@ -122,7 +118,7 @@ class StateTask:
 
 
 class LMTask:
-    """models/yggdrasil/training/train.py LMTask (enwik8): raw bytes, 90M / 5M / 5M split, windows of T from a zero state, bits per byte."""
+    """enwik8 bytes, 90M / 5M / 5M split, evaluated in windows of T."""
 
     def __init__(self, name, T, val_windows, test_chars):
         assert name == "enwik8"
@@ -142,7 +138,7 @@ class LMTask:
         return self.train[idx].astype(np.int32), self.train[idx + 1].astype(np.int32), np.ones((size, self.T), np.float32)
 
     def evaluate(self, nll_fn, split, chunk=64):
-        """nll_fn(x, y) -> summed negative log-likelihood (nats). Returns bits per byte."""
+        """nll_fn(x, y) -> summed NLL in nats. Returns bits per byte."""
         x, y = self.sets[split]
         nll = sum(float(nll_fn(x[i:i + chunk], y[i:i + chunk])) for i in range(0, len(x), chunk))
         return nll / y.size / LN2

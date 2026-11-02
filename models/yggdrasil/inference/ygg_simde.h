@@ -1,7 +1,5 @@
-// Portable build of ygg.cpp for hosts without AVX-512 VNNI: SIMDe emulates the
-// AVX-512 intrinsics with exact integer / IEEE semantics. Correctness checks only; timings of this build are not the
-// AVX-512 kernel's. Build: clang++ -DYGG_SIMDE -I<simde> -O3 -march=native -ffp-contract=off -std=c++17 ...
-// (SIMDe: https://github.com/simd-everywhere/simde, header-only)
+// Portable build for hosts without AVX-512 VNNI, via SIMDe (https://github.com/simd-everywhere/simde).
+// Same results as the native build; not for timing.
 #pragma once
 #define SIMDE_ENABLE_NATIVE_ALIASES
 #include <simde/x86/avx512.h>

@@ -1,30 +1,7 @@
-"""Shared training loop of the baselines (the protocol of models/yggdrasil/training/train.py). Each models/<model>/training/train.py defines
-build(cfg, vocab, classes) and add_args(parser) and calls main(<model>, build, add_args).
+"""Training loop for the baselines. Each models/<model>/training/train.py defines build(cfg, vocab, classes)
+and add_args(parser), then calls main(<model>, build, add_args).
 
-    python models/<model>/training/train.py --task <task> <size flags> --lr <lr> --seed <seed> [--wandb true]
-    python models/<model>/training/train.py --task <task> --seeds <s1,s2,s3> ...         one W&B sweep trial
-
-
-Data and evaluation (models/yggdrasil/training/train.py, through tasks.py, a verbatim copy of models/yggdrasil/training/train.py's task code):
-  enwik8, hg38   LMTask: enwik8 raw bytes split 90M / 5M / 5M (vocab 256); hg38 data/hg38/{train,valid,test}.u8
-                 (vocab 5). Batches of --batch random windows of --T (numpy default_rng(seed)), zero state per window.
-                 Validation bits per token on the first --val_windows windows, test on the first --test_chars // T.
-  state tasks    StateTask: s5_word, a5_word (train 32, test 500), parity_check, cycle_navigation, modular_arithmetic
-                 (train 40, test 256). Loss on every labelled prefix; validation = sequence accuracy at the test
-                 length on 512 sequences (seed 20000 + s); test at L in {32, 64, 128, 256, 500} (seed 10000 + s).
-Optimiser: Adam(0.9, --beta2, 1e-8) (AdamW with decay on >= 2-d weights when --weight_decay > 0), global-norm clip 1,
-optax warmup_cosine_decay_schedule(0, lr, warmup, steps, lr / 100) with warmup = min(1000, steps // 10) or
---warmup_frac * steps, non-finite updates skipped (the schedule counts applied updates). fp32 with TF32 off, unless
-the model sets AMP (bf16 autocast, fp32 weights and optimiser state). The best-validation weights are kept and tested.
-
-Output in <--out>/<name>/:
-  ckpt.pt       torch.save dict: model (folder name), task, vocab, classes, config (all flags, a dict),
-                state_dict (best-validation weights, fp32, CPU), amp (None or "bfloat16": the autocast dtype of
-                training and evaluation), best_val, best_step, test, n_params, versions
-  result.json   the same without the weights, plus the evaluation log
-load(path) rebuilds the module from ckpt.pt with the model's own build() (see below).
-W&B (--wandb true, or under a sweep agent): loss / val / best_val per evaluation; summary objective (sweeps maximise
-it) = -best val bits (LM) or best val sequence accuracy (state), best_val, test, n_params, ckpt.
+    python models/<model>/training/train.py --task <task> [flags]
 """
 import argparse
 import importlib.util
@@ -55,7 +32,7 @@ torch.set_float32_matmul_precision("highest")
 
 
 class LMTask:
-    """models/yggdrasil/training/train.py LMTask (enwik8 and hg38), zero state per window, bits per token."""
+    """enwik8 or hg38, evaluated in windows of T, bits per token."""
 
     def __init__(self, name, T, val_windows, test_chars):
         data = ROOT / "data"
@@ -66,7 +43,7 @@ class LMTask:
             self.train, val, test = (np.memmap(data / name / f"{s}.u8", np.uint8, "r") for s in ("train", "valid", "test"))
         self.vocab = self.classes = tasks.LM_TASKS[name]
         self.T = self.train_len = self.eval_len = T
-        self.streams = {"val": val, "test": test}  # raw splits (streaming evaluation)
+        self.streams = {"val": val, "test": test}
         self.sets = {"val": self._windows(val, val_windows), "test": self._windows(test, test_chars // T)}
 
     def _windows(self, ids, m):
@@ -93,18 +70,18 @@ def parser(model, add_args):
     add = ap.add_argument
     add("--task", required=True, choices=[*tasks.LM_TASKS, *tasks.STATE_TASKS])
     add("--seed", type=int, default=0)
-    add("--seeds", default="", help="comma list: one process per seed, W&B objective = mean (one sweep trial)")
-    add("--steps", type=int, default=None, help="default 80k s5/a5, 40k other state tasks, 10k enwik8 / hg38")
-    add("--batch", type=int, default=None, help="default 256 (state tasks), 64 (enwik8 / hg38)")
+    add("--seeds", default="", help="comma list, one process per seed")
+    add("--steps", type=int, default=None, help="default depends on task")
+    add("--batch", type=int, default=None, help="default 256 state, 64 LM")
     add("--lr", type=float, default=1e-3)
     add("--beta2", type=float, default=0.999)
     add("--weight_decay", type=float, default=0.0)
-    add("--warmup_frac", type=float, default=None, help="warmup = this fraction of steps (default min(1000, steps/10))")
+    add("--warmup_frac", type=float, default=None, help="warmup fraction of steps")
     add("--T", type=int, default=256, help="LM window length")
     add("--val_windows", type=int, default=512)
     add("--test_chars", type=int, default=5_000_000)
-    add("--eval_every", type=int, default=None, help="default 2000 (LM), 4000 (state tasks)")
-    add("--eval_batch", type=int, default=0, help="sequences per evaluation call (default 64 LM, 128 state)")
+    add("--eval_every", type=int, default=None, help="default 2000 LM, 4000 state")
+    add("--eval_batch", type=int, default=0, help="eval chunk size")
     add("--log_every", type=int, default=100)
     add("--out", default=str(ROOT / "results" / "baselines"))
     add("--tag", default="")
@@ -137,7 +114,7 @@ def versions():
 def train(model_name, build, a, amp=None):
     lm = a.task in tasks.LM_TASKS
     task = LMTask(a.task, a.T, a.val_windows, a.test_chars) if lm else tasks.StateTask(a.task, a.seed)
-    a.max_len = max(task.train_len, task.eval_len)  # longest sequence the model sees (position tables)
+    a.max_len = max(task.train_len, task.eval_len)  # for position tables
     torch.manual_seed(a.seed)
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     dev_name = torch.cuda.get_device_name() if dev.type == "cuda" else "cpu"
@@ -239,12 +216,11 @@ def train(model_name, build, a, amp=None):
 
 
 def trial(a, argv):
-    """One W&B sweep trial: one process per seed on this GPU; objective = mean over seeds of the best validation value
-    (state: sequence accuracy at the test length, a failed seed counts 0; LM: -bits per token)."""
+    """Run one process per seed and log the mean best validation score to W&B."""
     import wandb
     wb = wandb.init()
     seeds = a.seeds.split(",")
-    rest, skip = [], False  # argv without --seeds and --seed
+    rest, skip = [], False
     for x in argv:
         if skip or x.split("=")[0] in ("--seeds", "--seed"):
             skip = x in ("--seeds", "--seed")
@@ -284,9 +260,7 @@ def main(model_name, build, add_args, amp=None):
 
 
 def load(path, device="cpu"):
-    """ckpt.pt -> (module with the best weights, eval mode, the checkpoint dict). The module is built by
-    models/<model>/training/train.py build(config, vocab, classes) in the current Python (the model's package must be
-    importable: use the model's environment, env.py)."""
+    """Load ckpt.pt -> (model in eval mode, checkpoint dict). Run in the model's environment."""
     ck = torch.load(path, map_location="cpu", weights_only=False)
     spec = importlib.util.spec_from_file_location(f"train_{ck['model']}", MODELS / ck["model"] / "training" / "train.py")
     mod = importlib.util.module_from_spec(spec)

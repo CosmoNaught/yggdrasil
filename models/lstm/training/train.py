@@ -1,12 +1,5 @@
-"""LSTM training.
-
-Source: PyTorch torch.nn.LSTM (cuDNN kernels on GPU), torch 2.10.0, https://github.com/pytorch/pytorch (BSD-3-Clause).
-Model: token embedding (vocab x d), torch.nn.LSTM (d -> d, --layers layers, batch_first), linear head with bias.
---forget_bias sets the forget-gate bias at initialisation (split equally over b_ih and b_hh; default 0 = PyTorch init).
-
-    python models/lstm/training/train.py --task <task> --d <width> --layers <layers> [--forget_bias <b>] --lr <lr> --seed <seed>
-
-"""
+"""LSTM baseline: token embedding, torch.nn.LSTM, linear head."""
+# Upstream: torch.nn.LSTM, PyTorch (https://github.com/pytorch/pytorch), BSD-3-Clause.
 import sys
 from pathlib import Path
 
@@ -31,7 +24,8 @@ class LSTM(nn.Module):
         self.emb = nn.Embedding(vocab, d)
         self.rnn = nn.LSTM(d, d, num_layers=layers, batch_first=True)
         self.head = nn.Linear(d, classes)
-        if forget_bias:  # gate order i, f, g, o: the forget gate is rows d..2d of both biases
+        if forget_bias:
+            # Gate order is (i, f, g, o); split the forget bias over b_ih and b_hh
             with torch.no_grad():
                 for name, b in self.rnn.named_parameters():
                     if name.startswith("bias"):

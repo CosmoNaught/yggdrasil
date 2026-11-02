@@ -1,8 +1,6 @@
-"""One entry point for every baseline: --model <name> runs models/<name>/training/train.py with the other flags (in
-that model's Python environment, env.py). deltaproduct2 / deltaproduct4 = deltaproduct --householder 2 / 4.
+"""Run models/<model>/training/train.py in that model's environment.
 
-    python shared/train.py --model <model> --task <task> <size flags> --lr <lr> --seed <seed>
-
+    python shared/train.py --model <model> --task <task> [flags]
 """
 import os
 import sys

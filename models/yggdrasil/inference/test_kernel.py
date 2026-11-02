@@ -1,7 +1,6 @@
-"""Kernel against the bit-exact NumPy model (export.int_forward) on random int models of several shapes, for the
-default walk, the blocked walk and leaf prefetch. Prints the max |logit difference| (0 = bit-exact).
+"""Compare ygg with export.int_forward on random models (default, --blocked, --prefetch). 0 = bit-exact.
 
-    python models/yggdrasil/inference/test_kernel.py [--ygg models/yggdrasil/inference/ygg]
+    python test_kernel.py [--ygg ./ygg]
 """
 import argparse
 import os

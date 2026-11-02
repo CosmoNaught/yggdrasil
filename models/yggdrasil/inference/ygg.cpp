@@ -1,35 +1,10 @@
-// Yggdrasil int8 CPU runtime: one stream, one core, AVX-512 VNNI. Model file from models/yggdrasil/inference/export.py (models/yggdrasil/training/train.py's model).
+// Yggdrasil int8 inference: single stream, single core, AVX-512 VNNI. Model files come from export.py.
 //
-// Per token x, per layer l (state q_l int8, n = 64, 128 or 256):
-//   leaf  : l = 0 (root): r = x, or with a context (export "l0_ctx": k, V^(k-1), bits) c = (c mod V^(k-1)) V + x
-//           (c = 0 at a stream start) and r = c (bits = 0) or (c * 2654435761 mod 2^32) >> (32 - bits).
-//           l > 0 (branch): rho = 1 / sqrtf(f32(sum q_{l-1}^2) / n + eps) (the RMS step), then a
-//           depth-D walk over Eytzinger nodes 1..2^D-1, right iff f32(dot(w_node, q_{l-1})) rho > thr[x][node].
-//   update: q_l = sat8((A16_r q_l + 2^(sh-1)) >> sh  +  T_r[x]  +  rint(f32(U_low_r zl) m_ul))
-//           A16_r block-diagonal (b = 8 or 16, int16 fixed point 2^sh); zl = sat8(rint(f32(V_low q_{l-1}) m_v rho))
-//           (the low-rank input from below, branches with lower_rank > 0 only)
-//   readout: z = P_r q_l (R rows; P_0 for every leaf when shared_out), zq = sat8(rint(f32(z) m_z)),
-//           logits += f32(Q zq) sq   (logits start at head_b)
-// Leaf record (contiguous): [A | U_low | P (leaf-owned only) | T]; T is V rows of n int16 (root without a context: its
-// own token's row).
-//
-// Usage: ygg logits model.bin x.i32 nwin T out.f32 [--blocked] [--prefetch]   logits of nwin windows of T tokens
-//        ygg score  model.bin x.i32 y.i32 nwin T [--blocked] [--prefetch]    bits per token (zero state per window)
-//        ygg bench  model.bin [opts]                      single-stream ns / token
-//        ygg time   model.bin x.i32 [--seg S] [--warm K] [--prefetch] [--blocked]
-//                   the final timing protocol: the real token stream x (state carried from a zero start), full next-
-//                   symbol distribution every step (logits + softmax over all V, as the baseline timing);
-//                   one untimed warm-up pass over x, then one timed pass in segments of S tokens (default 10000);
-//                   --warm K instead: untimed steps on the first K tokens, then the rest timed in segments, state
-//                   carried;
-//                   prints the median / mean / min / max ns per token over the segments.
-//   score with nwin = 1 and T = len(x) is the streaming test score (one window, state carried over the whole stream).
-//   bench opts: --secs S (per round, default 1)  --rounds K (default 5)  --tokens file.i32 (default random tokens)
-//               --no-logits (skip the readout)  --prefetch (prefetch the leaf record once the leaf id is known)
-//               --blocked (walk 4 levels per step: the 15 dots of a 4-level subtree, one transposed reduction)
-//               --randleaf K (DRAM study: walk, then replace each branch leaf by one of the first K leaves, K a power
-//                             of two, pseudo-random but data-dependent on the walked leaf; timing only)
-// Env YGG_THP=0: no madvise(MADV_HUGEPAGE) on the model.
+// Usage: ygg logits model.bin x.i32 nwin T out.f32 [--blocked] [--prefetch]
+//        ygg score  model.bin x.i32 y.i32 nwin T [--blocked] [--prefetch]
+//        ygg time   model.bin x.i32 [--seg S] [--warm K] [--blocked] [--prefetch]
+//        ygg bench  model.bin [--secs S] [--rounds K] [--tokens x.i32] [--no-logits] [--blocked] [--prefetch] [--randleaf K]
+// --blocked walks 4 tree levels per step; --prefetch prefetches the leaf record. YGG_THP=0 disables huge pages.
 #define _GNU_SOURCE 1
 #ifdef YGG_SIMDE
 #include "ygg_simde.h"
@@ -49,7 +24,7 @@
 #include <string>
 #include <vector>
 
-// softmax over V logits into prob (the full distribution; vexp = nkern.cpp / okern.cpp's polynomial)
+// exp(x) = 2^n p(f), t = x log2(e) = n + f
 static inline __m512 vexp(__m512 x) {
     x = _mm512_min_ps(_mm512_max_ps(x, _mm512_set1_ps(-87.f)), _mm512_set1_ps(88.f));
     __m512 t = _mm512_mul_ps(x, _mm512_set1_ps(1.4426950408889634f));
@@ -86,10 +61,9 @@ struct Lay {
     const uint8_t *Q; float mz, sq;          // class map, scales
     const uint8_t *w; const float *thr;      // branch: node rows (u8, w + 128) [2^D][n], thresholds [V][2^D]
     const uint8_t *vl; const float *mv; float eps, mul;
-    const float *mulv, *r2b, *mzl;           // group state scales (null: one scale per layer): m_ul per coordinate,
-                                             // r^2 of the layer below per 16 coordinates (weighted RMS step),
-                                             // readout multipliers per leaf and row (null: one m_z)
-    const int8_t *vt; const float *mT; int oF, oC, oS;  // factored input (vt null: the T table)
+    const float *mulv, *r2b, *mzl;           // group scales (null: per tensor): m_ul per coordinate,
+                                             // r^2 of the layer below per 16 coordinates, m_z per leaf and row
+    const int8_t *vt; const float *mT; int oF, oC, oS;  // factored input (null: table T)
     const float *sqv;                                    // head scale per class (null: one sq)
     uint8_t *wb; float *thb; int NB, cbase[4];  // blocked walk layout, built at load
     int ck, cbits; uint32_t cmod;               // root context: k (0 = none), hash bits (0 = exact), V^(k-1)
@@ -108,8 +82,7 @@ static void *amalloc2m(size_t sz, bool thp) {
 #ifndef MADV_COLLAPSE
 #define MADV_COLLAPSE 25
 #endif
-// after the data is written: collapse the region into huge pages now (Linux >= 6.1; ignored elsewhere), so the timing
-// does not depend on how soon khugepaged promotes the pages of a freshly loaded model
+// Collapse into huge pages now (Linux >= 6.1) instead of waiting for khugepaged.
 static void collapse2m(void *p, size_t sz, bool thp) {
     if (!thp) return;
     const size_t al = (sz + (2u << 20) - 1) / (2u << 20) * (2u << 20);
@@ -122,8 +95,8 @@ static long anon_huge_kb() {
     fclose(f); return v;
 }
 
-// blocked layout: the 2^lk - 1 nodes of each 4-level subtree (heap order) in 16 consecutive slots;
-// rows wb[(blk * 16 + o) * n], thresholds thb[(x * NB + blk) * 16 + o]; subtree roots of chunk c are the nodes at level 4c
+// Blocked layout: the nodes of each 4-level subtree (heap order) in 16 consecutive slots.
+// rows wb[(blk * 16 + o) * n], thresholds thb[(x * NB + blk) * 16 + o]; chunk c starts at level 4c.
 static void build_blocked(const Model &m, Lay &y, bool thp) {
     const int D = m.D, NL = m.NL, nch = (D + 3) / 4, N = m.n, V = m.V;
     int NB = 0;
@@ -241,7 +214,7 @@ template <int N> static inline __m512i dotv(const uint8_t *w, const int8_t *q) {
     for (int c = 64; c < N; c += 64) a = _mm512_dpbusd_epi32(a, _mm512_loadu_si512(w + c), _mm512_loadu_si512(q + c));
     return a;
 }
-// RMS step: rho = 1 / sqrtf(f32(sum q^2) * (1 / N) + eps), exact integer sum of squares
+// rho = 1 / sqrt(mean(q^2) + eps), exact integer sum of squares
 template <int N> static inline float rmsr(const int8_t *q, float eps) {
     __m512i a = _mm512_setzero_si512();
     for (int c = 0; c < N; c += 32) {
@@ -251,8 +224,8 @@ template <int N> static inline float rmsr(const int8_t *q, float eps) {
     return 1.0f / sqrtf((float)_mm512_reduce_add_epi32(a) * (1.0f / N) + eps);
 }
 
-// group state scales: rho = 1 / sqrtf(f32 sum_g r2[g] S_g * (1 / N) + eps), S_g exact integer sum of q^2 over the 16
-// coordinates of group g, the f32 sum taken in group order (export.int_forward does the same)
+// Group scales: rho = 1 / sqrt(sum_g r2[g] S_g / N + eps), S_g = exact sum of q^2 over group g.
+// The f32 sum runs in group order, as in export.int_forward.
 template <int N> static inline float rmsr_g(const int8_t *q, const float *r2, float eps) {
     float s = 0.0f;
     for (int c = 0; c < N; c += 32) {
@@ -396,7 +369,7 @@ static inline void update(const Model &m, const Lay &y, int r, int x, int8_t *q,
             for (int b = 0; b < NG; b++) la[b] = _mm512_dpbusd_epi32(la[b], _mm512_loadu_si512(u + ((size_t)kc * NG + b) * 64), zb);
         }
         const __m512i cz = _mm512_set1_epi32(128 * zs);
-        if (y.mulv) {  // group state scales: m_ul per coordinate
+        if (y.mulv) {  // m_ul per coordinate
             for (int b = 0; b < NG; b++) acc[b] = _mm512_add_epi32(acc[b], _mm512_cvtps_epi32(_mm512_mul_ps(_mm512_cvtepi32_ps(_mm512_sub_epi32(la[b], cz)), _mm512_loadu_ps(y.mulv + 16 * b))));
         } else {
             const __m512 mu = _mm512_set1_ps(y.mul);
@@ -527,7 +500,7 @@ int main(int argc, char **argv) {
         const bool sc = mode == "score";
         if (argc < 7) { fprintf(stderr, "usage\n"); return 1; }
         const int a0 = sc ? 5 : 4, nw = atoi(argv[a0]), T = atoi(argv[a0 + 1]);
-        int fl = 0;  // --blocked / --prefetch: same numbers, other code path
+        int fl = 0;
         for (int i = sc ? 7 : 8; i < argc; i++) fl |= !strcmp(argv[i], "--blocked") ? F_WBLK : !strcmp(argv[i], "--prefetch") ? F_PFL : 0;
         std::vector<int32_t> tok = readi32(argv[3], (size_t)nw * T), tgt;
         if (sc) tgt = readi32(argv[4], (size_t)nw * T);
@@ -569,10 +542,10 @@ int main(int argc, char **argv) {
         float *prob; if (posix_memalign((void **)&prob, 64, (size_t)m.VP * 4 + 64)) return 1;
         double chk = 0;
         size_t T0 = 0;  // first timed token
-        if (warm < 0) {  // default: untimed pass over the whole stream, then the same stream timed from a zero state
+        if (warm < 0) {  // untimed pass over the stream, then reset
             for (size_t t = 0; t < NT; t++) { fn(m, st, tok[t], fl); chk += softmax(st.lg, prob, V); }
             memset(st.q, 0, (size_t)m.L * m.n); st.c = 0;
-        } else {  // --warm K: untimed steps on the first K tokens, then the following tokens timed, state carried
+        } else {  // untimed first K tokens, state carried
             if ((size_t)warm >= NT) { fprintf(stderr, "--warm >= stream length\n"); return 1; }
             for (size_t t = 0; t < (size_t)warm; t++) { fn(m, st, tok[t], fl); chk += softmax(st.lg, prob, V); }
             T0 = (size_t)warm;

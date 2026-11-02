@@ -1,31 +1,17 @@
-"""models/yggdrasil/training/train.py checkpoint (.npz) -> model.bin for models/yggdrasil/inference/ygg.cpp, plus the bit-exact NumPy model of the int8 kernel.
+"""Export a train.py checkpoint (.npz) to model.bin for ygg.cpp. Also a bit-exact NumPy model of the int8 kernel.
 
-    python models/yggdrasil/inference/export.py --npz results/<run>.npz --out model.bin           trained model (calibrated on the train split)
-    python models/yggdrasil/inference/export.py --random 128,16,12,256 --out model.bin            random weights in the same format (timing)
-                         (--random n,b,D,V[,layers,out_rank,lower_rank,shared_out]; defaults 2,8,16,0)
+    python export.py --npz results/<run>.npz --out model.bin
+    python export.py --random n,b,D,V[,layers,out_rank,lower_rank,shared_out] --out model.bin   # random weights
 
-Integer scheme (per layer l; s_l = max|h_l| * hmargin / 127 from a calibration run of the float hard-mode model):
-  state     q_l int8, h_l ~ s_l q_l
-  transition p = (A16_r q + 2^13) >> 14 per block, A16 = rint(2^14 A_r), A_r = diag(clip(d_r)) blockdiag(expm(S - S^T)/2)
-  input      T_r[x] = rint((U_r v(x) + c_r) / s_l) int16 (root: leaf = token, one row per leaf)
-  context    root with --context_len k: leaf = context_leaf of the last k tokens (rolled per step), V rows per leaf
-  RMS step   nu(h_{l-1}) = q_{l-1} rho, rho = 1 / sqrt(mean(q_{l-1}^2) + 1e-6 / s_{l-1}^2)   (f32)
-  walk       node test w . [e(x); nu] + b > 0  <=>  f32(dot(wq, q_{l-1})) rho > thr[x][node] = -(e(x) . w_tok + b) / sw
-  from below zl = sat8(rint(f32(vq q_{l-1}) m_v rho)), drive += rint(f32(uq_r zl) m_ul)
-  readout    zq = sat8(rint(f32(pq_r q_l) m_z)), logits = head_b + sum_l f32(Qq zq) sq_l
-Group state scales (--state_scale group, or picked by calibration under auto): one scale per 16 state coordinates,
-s_{l,g} = max|h_l| over group g * hmargin / 127, h_l ~ s_{l,g(i)} q_{l,i}. The block maps act inside a group, so A16 is
-unchanged; T, the readout P (columns times s), the node rows and V_low of the layer above (columns times r = s / s_ref,
-s_ref = max_g s_{l,g}) and m_ul (one value per coordinate) carry the scales. The RMS step becomes
-rho = 1 / sqrt(f32 sum_g r_g^2 S_g / n + 1e-6 / s_ref^2) with S_g the exact integer sum of q^2 over group g (f32 sum in
-group order). The readout of this scheme uses one P scale per leaf and row and one z scale per output, calibrated on the
-float model: zq = sat8(rint(f32(pq_r q) mzl[r])), mzl = s_p[r, row] / s_z, s_z = max|z| * zmargin / 127, and the head
-has one scale per class: logits += f32(Qq zq) sqv[class], Qq = per-row int8 of Q, sqv = s_q[class] s_z.
-Files without these arrays use the per-tensor scheme above unchanged.
-Factored storage (--storage factored; branch layers only, the root keeps its one row per token): instead of the table
-T_r[x] (V rows of n int16 per leaf) a leaf stores uf_r = rint(U_r / su_r) int8 (n x rank, per-leaf scale su_r) and
-cq_r = rint(c_r / s) int16, the layer stores vt = rint(v_tok / s_vt) int8 (V x rank, per-tensor) and mT = s_vt / s
-(one f32 per coordinate); per step T_r[x] = rint(f32(uf_r vt[x]) f32(su_r mT)) + cq_r. About one byte per parameter.
+Integer scheme, per layer l (state h_l ~ s_l q_l, q_l int8):
+  transition  p = (A16_r q + 2^13) >> 14, A16 = rint(2^14 A_r)
+  input       T_r[x] = rint((U_r v(x) + c_r) / s_l), int16
+  RMS         rho = 1 / sqrt(mean(q_{l-1}^2) + 1e-6 / s_{l-1}^2)
+  walk        right iff f32(dot(wq, q_{l-1})) rho > thr[x][node]
+  from below  zl = sat8(rint(f32(vq q_{l-1}) m_v rho)), drive += rint(f32(uq_r zl) m_ul)
+  readout     zq = sat8(rint(f32(pq_r q_l) m_z)), logits = head_b + sum_l f32(Qq zq) sq_l
+--state_scale group: one state scale per 16 coordinates, readout scales per leaf and row, head scales per class.
+--storage factored: branch leaves store uf_r int8 and cq_r int16, T_r[x] = rint(f32(uf_r vt[x]) f32(su_r mT)) + cq_r.
 """
 import argparse
 import json
@@ -37,7 +23,7 @@ from pathlib import Path
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parents[2]  # the repository (data/)
+ROOT = HERE.parents[2]  # repository root
 f32 = np.float32
 SH = 14  # fixed-point shift of the block maps
 
@@ -45,7 +31,7 @@ SH = 14  # fixed-point shift of the block maps
 # ------------------------------------------------------------------------------------------------- params and data
 
 def load_params(path):
-    """models/yggdrasil/training/train.py save() .npz -> {"root": {...}, "branches": [{...}, ...], "head_b"} (NumPy)."""
+    """train.py .npz -> {"root": {...}, "branches": [{...}, ...], "head_b": ...}."""
     z, P = np.load(path), {"branches": []}
     for name in z.files:
         s = name.split("/")
@@ -62,7 +48,7 @@ def load_params(path):
 
 
 def load_split(task, split):
-    """models/yggdrasil/training/train.py's LM splits: enwik8 raw bytes 90M / 5M / 5M; hg38 data/hg38/{train,valid,test}.u8."""
+    """enwik8: bytes split 90M / 5M / 5M. Other tasks: data/<task>/{train,valid,test}.u8."""
     if task == "enwik8":
         raw = np.frombuffer((ROOT / "data" / "enwik8").read_bytes(), np.uint8)
         return {"train": raw[:90_000_000], "val": raw[90_000_000:95_000_000], "test": raw[95_000_000:]}[split]
@@ -70,7 +56,7 @@ def load_split(task, split):
 
 
 def windows(ids, T, m):
-    """models/yggdrasil/training/train.py LMTask._windows: m windows of T tokens, targets shifted by one."""
+    """m windows of T tokens and next-token targets."""
     m = min(m, (len(ids) - 1) // T)
     ids = np.asarray(ids[:m * T + 1], np.int32)
     return ids[:-1].reshape(m, T), ids[1:].reshape(m, T)
@@ -86,7 +72,7 @@ def bpc(logits, y):
 # ------------------------------------------------------------------------------------------------- float hard model
 
 def hard_layers(P):
-    """Per layer: the hard-mode float model (float64), as main.forward(mode="hard")."""
+    """Float64 parameters per layer for hard routing, as in train.forward(mode="hard")."""
     import scipy.linalg
     out = []
     for i, p in enumerate([P["root"]] + list(P["branches"])):
@@ -122,14 +108,13 @@ def table(q, r, x):
 
 
 def context_step(c, x, k, V, NL):
-    """main.context_leaf one step: c = (c mod V^(k - 1)) V + x (start 0); leaf = c (NL = V^k) or the top bits of
-    c * 2654435761 mod 2^32. Returns (c, leaf)."""
+    """c = (c mod V^(k-1)) V + x; leaf = c if NL = V^k, else top bits of c * 2654435761 mod 2^32. Returns (c, leaf)."""
     c = (c % V ** (k - 1)) * V + x
     return c, c if V ** k == NL else ((c * 2654435761) & 0xFFFFFFFF) >> (32 - (NL.bit_length() - 1))
 
 
 def float_forward(HL, head_b, x, stats=False):
-    """x (S, T) -> logits (S, T, V) float64, hard mode, zero state per window. stats: max |h|, |V_low nu|, |P h|."""
+    """x (S, T) -> logits (S, T, V), zero initial state. stats=True returns max |h|, |V_low nu|, |P h| instead."""
     S, T = x.shape
     hs = [np.zeros((S, q["n"])) for q in HL]
     st = [dict(h=0.0, v=0.0, z=0.0, hg=np.zeros(q["n"] // 16), zr=np.zeros(q["P"].shape[1])) for q in HL]
@@ -182,7 +167,7 @@ def qten(w):  # per-tensor symmetric int8
 
 
 def factor(q, sc):
-    """Factored input of a branch layer (module docstring); sc: the per-coordinate state scale (n,)."""
+    """Factored input of a branch layer; sc: per-coordinate state scale (n,)."""
     vt, s_vt = qten(q["v_tok"])
     U = q["u_in"]                                    # (NL, n, rank)
     su = np.maximum(np.abs(U).reshape(len(U), -1).max(-1), 1e-12) / 127
@@ -199,7 +184,7 @@ def quantize(HL, st, hmargin=1.0, group=False, factored=False, zmargin=1.0):
         s_h = st[l]["h"] * hmargin / 127
         NL, V = len(q["A"]), len(q["v_tok"])
         e = dict(n=q["n"], b=q["b"], D=q["D"], root=q["root"], A16=np.rint(q["A"] * 2.0 ** SH).astype(np.int64))
-        if q["root"] and "ctx" not in q:  # one leaf per token: only the diagonal T_x[x]
+        if q["root"] and "ctx" not in q:  # one leaf per token: store only T_x[x]
             ar = np.arange(V)
             e["T"] = np.clip(np.rint(table(q, ar, ar) / s_h), -32768, 32767).astype(np.int16)[:, None]  # (V, 1, n)
         elif factored and not q["root"]:
@@ -234,7 +219,7 @@ def quantize(HL, st, hmargin=1.0, group=False, factored=False, zmargin=1.0):
 
 
 def quantize_group(HL, st, hmargin=1.0, factored=False, zmargin=1.0):
-    """The scheme with one state scale per 16 coordinates (module docstring)."""
+    """quantize() with one state scale per 16 coordinates."""
     Qs, rc_prev, sref_prev = [], None, 1.0
     for l, q in enumerate(HL):
         n = q["n"]
@@ -271,7 +256,7 @@ def quantize_group(HL, st, hmargin=1.0, factored=False, zmargin=1.0):
                 e["mulv"] = (s_u * s_v / sc).astype(f32)
                 e["m_ul"] = f32(0)
         e["pq"], s_p = qrow(q["P"] * sc[None, None, :])           # (leaves, R) scales
-        s_z = max(st[l]["z"], 1e-12) * zmargin / 127              # one z scale (the Q matvec is an integer dot)
+        s_z = max(st[l]["z"], 1e-12) * zmargin / 127              # one z scale
         e["mzl"] = (s_p / s_z).astype(f32)
         e["m_z"] = f32(0)
         e["Qq"], s_qv = qrow(q["Q"])                                # one Q scale per class
@@ -384,7 +369,7 @@ def write(Qs, head_b, path, info):
     for e in Qs[1:]:
         assert e["D"] == D and e["pq"].shape[1] == R and (len(e["pq"]) == 1) == bool(shared)
         assert ("uq" in e) == bool(R2) and (not R2 or e["uq"].shape[2] == R2)
-    RG = max(1, (R2 + 15) // 16)  # 16-lane groups of the low-rank input (1 or 2 up to R2 32, as before)
+    RG = max(1, (R2 + 15) // 16)  # 16-lane groups of the low-rank input
     fac = [e for e in Qs if "uf" in e]
     rank = fac[0]["uf"].shape[2] if fac else info.get("rank", 0)
     assert not fac or (rank % 4 == 0 and rank <= 64)
@@ -449,7 +434,7 @@ def write(Qs, head_b, path, info):
             sv = np.zeros(VP, f32)
             sv[:V] = e["sqv"]
             add(P + "sqv", sv)
-        if "mzl" in e:  # R = 8: lane i of the kernel's readout holds row i / 2
+        if "mzl" in e:  # R = 8: kernel lane i holds row i / 2
             add(P + "mzl", np.repeat(e["mzl"], 2, axis=1) if R == 8 else np.asarray(e["mzl"], f32))
         add(P + "scal", np.array([e["m_z"], e["sq"], e.get("eps", 0), e.get("m_ul", 0)], f32))
     with open(path, "wb") as f:
@@ -470,8 +455,7 @@ def write(Qs, head_b, path, info):
 # ------------------------------------------------------------------------------------------------- random models
 
 def random_quantized(n, b, D, V, L=2, R=8, R2=16, shared=0, seed=1, group=False, factored=0):
-    """Random int parameters in the exact export format (timing only): orthogonal blocks times decays U[0.6, 1],
-    small tables, random node rows and thresholds."""
+    """Random int8 model in the export format: orthogonal blocks with decays U[0.6, 1], small tables."""
     rng = np.random.default_rng(seed)
     g = n // b
     orth = np.linalg.qr(rng.standard_normal((64, b, b)))[0]  # 64 distinct orthogonal blocks
@@ -503,10 +487,10 @@ def random_quantized(n, b, D, V, L=2, R=8, R2=16, shared=0, seed=1, group=False,
                 e["m_v"] = np.full(R2, 0.05, f32)
                 e["uq"] = rng.integers(-127, 128, (NL, n, R2), dtype=np.int8).astype(np.int64)
                 e["m_ul"] = f32(0.002)
-        if group:  # readout per leaf and row, head per class (kernel test)
+        if group:  # readout scale per leaf and row, head scale per class
             e["mzl"] = rng.uniform(0.0005, 0.004, (1 if shared else NL, R)).astype(f32)
             e["sqv"] = rng.uniform(0.0005, 0.002, V).astype(f32)
-        if group and l > 0:  # group state scales (kernel test): r^2 of the layer below, m_ul per coordinate
+        if group and l > 0:  # group scales: r^2 of the layer below, m_ul per coordinate
             e["r2b"] = (rng.uniform(0.05, 1.0, n // 16) ** 2).astype(f32)
             if R2:
                 e["mulv"] = rng.uniform(0.0005, 0.004, n).astype(f32)

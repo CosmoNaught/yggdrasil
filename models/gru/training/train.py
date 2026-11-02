@@ -1,11 +1,5 @@
-"""GRU training.
-
-Source: PyTorch torch.nn.GRU (cuDNN kernels on GPU), torch 2.10.0, https://github.com/pytorch/pytorch (BSD-3-Clause).
-Model: token embedding (vocab x d), torch.nn.GRU (d -> d, --layers layers, batch_first), linear head with bias.
-
-    python models/gru/training/train.py --task <task> --d <width> --layers <layers> --lr <lr> --seed <seed>
-
-"""
+"""GRU baseline: token embedding, torch.nn.GRU, linear head."""
+# Upstream: torch.nn.GRU, PyTorch (https://github.com/pytorch/pytorch), BSD-3-Clause.
 import sys
 from pathlib import Path
 

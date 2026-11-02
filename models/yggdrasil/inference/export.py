@@ -490,7 +490,7 @@ def random_quantized(n, b, D, V, L=2, R=8, R2=16, shared=0, seed=1, group=False,
         if group:  # readout scale per leaf and row, head scale per class
             e["mzl"] = rng.uniform(0.0005, 0.004, (1 if shared else NL, R)).astype(f32)
             e["sqv"] = rng.uniform(0.0005, 0.002, V).astype(f32)
-        if group and l > 0:  # group scales: r^2 of the layer below, m_ul per coordinate
+        if group and l > 0:  # group scales: r^2 of the previous layer, m_ul per coordinate
             e["r2b"] = (rng.uniform(0.05, 1.0, n // 16) ** 2).astype(f32)
             if R2:
                 e["mulv"] = rng.uniform(0.0005, 0.004, n).astype(f32)

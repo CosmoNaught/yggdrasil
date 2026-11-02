@@ -62,7 +62,7 @@ struct Lay {
     const uint8_t *w; const float *thr;      // branch: node rows (u8, w + 128) [2^D][n], thresholds [V][2^D]
     const uint8_t *vl; const float *mv; float eps, mul;
     const float *mulv, *r2b, *mzl;           // group scales (null: per tensor): m_ul per coordinate,
-                                             // r^2 of the layer below per 16 coordinates, m_z per leaf and row
+                                             // r^2 of the previous layer per 16 coordinates, m_z per leaf and row
     const int8_t *vt; const float *mT; int oF, oC, oS;  // factored input (null: table T)
     const float *sqv;                                    // head scale per class (null: one sq)
     uint8_t *wb; float *thb; int NB, cbase[4];  // blocked walk layout, built at load

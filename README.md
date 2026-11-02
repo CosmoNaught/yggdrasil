@@ -1,18 +1,16 @@
 # Yggdrasil
 
-Sequence models that run token by token on a CPU read every weight at every step. Bigger means slower.
+Sequence models that run token by token on a CPU read every weight at every step, so their time per token grows with their size.
 
-Most of those weights do nothing for any one token.
-
-Yggdrasil stores a bank of transitions per layer and reads **one per token**, picked by a small binary tree. A
-195M-parameter model reads **0.2%** of its weights per token, trains in parallel like a linear RNN, and runs in an int8
+Yggdrasil stores 1,024 transitions per layer and reads **one per token**, selected by a depth-10 binary tree. A
+195M-parameter model reads **0.2%** of its weights per token, trains as a parallel scan, and runs in an int8
 CPU kernel.
 
 - **1.555 bpc on enwik8** vs 1.719 for the best baseline at the same active parameters
-- **1.567 bits/base on hg38** vs 1.637, beating HyenaDNA, Mamba-2 and the Transformer
-- **6.7 µs per token** on one CPU core: **4×** faster than GRU, **27×** faster than a Transformer
-- **178× to 3,782×** faster than dense models of the same size
-- **1.000 on all five state-tracking tasks**, including S5 and A5, where every other parallel model scores 0.000
+- **1.567 bits/base on hg38** vs 1.637 for the best baseline, ahead of HyenaDNA
+- **1.1 µs per base** on one CPU core, **15×** faster than GRU and **152×** faster than a Transformer
+- **178× to 3,782×** faster than dense models with the same stored parameters (5M to 800M)
+- **1.000 on all five state-tracking tasks**, including S5, where every other parallel model scores 0.000
 
 <p align="center"><img src="assets/architecture.png" width="520"></p>
 

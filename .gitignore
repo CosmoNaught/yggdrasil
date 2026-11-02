@@ -1,0 +1,13 @@
+data/
+results/
+logs/
+wandb/
+.venvs/
+__pycache__/
+*.pyc
+*.npz
+*.npy
+*.pt
+*.bin
+models/yggdrasil/inference/ygg
+models/yggdrasil/inference/ygg_simde

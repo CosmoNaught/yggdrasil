@@ -25,9 +25,16 @@ import numpy as np
 import optax
 
 ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # kernel modules
+import leaves  # noqa: E402
 LN2 = float(np.log(2.0))
 SKEW_STD = 0.05  # skew init std of the first block; the last block has std 1
 ROUTE_TAU = 0.5  # straight-through routing temperature
+LEAF_MM = "grouped"  # large-vocabulary branches: "grouped" leaf matmuls, or "dense" over all leaves
+LM_KERNEL = True  # large-vocabulary form on GPU: blocked scan kernel reading A from the leaf table (leaf_scan.py)
+LM_DTYPE = jnp.bfloat16  # large-vocabulary form: operand type of the leaf and head matmuls (fp32 accumulation)
+SCAN_IMPL = "scan"  # large-vocabulary form on GPU: "scan" (scan.py) or "leaf_scan" (leaf_scan.py)
+MESH = None  # large-vocabulary form: a 1-D device mesh (axis "x") shards the branch leaves by leaf id
 
 
 # ----------------------------------------------------------------------------------------------------------- model
@@ -37,16 +44,25 @@ def _normal(key, shape, scale):
 
 
 def init(key, vocab, classes, n=128, block=16, depth=8, layers=2, feat=16, rank=16, out_rank=8, lower_rank=16,
-         shared_out=False, branch="dyn", context=1, bits=16):
-    """branch: "dyn" (default), "out" (no stored transition, A_r = 0), "tok" (tree reads the token only)."""
+         shared_out=False, branch="dyn", context=1, bits=16, emb=0, root_rank=0, branch_leaves=None):
+    """branch: "dyn" (default), "out" (no stored transition, A_r = 0), "tok" (tree reads the token only).
+
+    emb > 0 (large vocabularies): one token embedding E (vocab, emb) shared by all layers and tied to the head,
+    logits = beta + E g rms(sum_l Q^l P^l_r h^l), Q^l (emb, out_rank); branches read v(x) = rms(E x) W_v and route on
+    [rms(E x); norm(h^{l-1})]. root_rank > 0: root leaf x = base leaf + (rms(E x) R) G, a rank root_rank leaf table.
+    branch_leaves: draw only this many branch leaves (to_tree keeps leaf 0 only).
+    """
     assert n % block == 0 and branch in ("dyn", "out", "tok") and (branch != "tok" or feat != n)
+    assert not root_rank or (emb and context == 1)
+    feat = emb or feat
     assert context == 1 or vocab**context < 2**32
     g = n // block
     keys = iter(jax.random.split(key, 16 * layers + 2))
     parts = []
     for i in range(layers):
-        leaves = (vocab if context == 1 else min(vocab**context, 2**bits)) if i == 0 else 2**depth
-        emb = _normal(next(keys), (vocab, feat), 1.0)  # drawn for the root too to keep the key order
+        leaves = (1 if root_rank else vocab if context == 1 else min(vocab**context, 2**bits)) if i == 0 else \
+            branch_leaves or 2**depth
+        tok = _normal(next(keys), (vocab, feat), 1.0)  # drawn for the root too to keep the key order
         p = {"v_tok": _normal(next(keys), (vocab, rank), 1.0),
              "u_in": _normal(next(keys), (leaves, n, rank), 0.5 * rank**-0.5),
              "c": _normal(next(keys), (leaves, n), 0.1),
@@ -56,7 +72,7 @@ def init(key, vocab, classes, n=128, block=16, depth=8, layers=2, feat=16, rank=
             p["p_out"] = p["p_out"][:1]
         if i > 0:
             n_in = feat if branch == "tok" else feat + n
-            p["tok"] = emb
+            p["tok"] = tok
             p["w_node"] = _normal(next(keys), (2**depth - 1, n_in), n_in**-0.5)
             p["b_node"] = jnp.zeros((2**depth - 1,))
         stds = SKEW_STD * (1.0 / SKEW_STD) ** (jnp.arange(g) / max(1, g - 1))
@@ -70,7 +86,27 @@ def init(key, vocab, classes, n=128, block=16, depth=8, layers=2, feat=16, rank=
         if context > 1 and i == 0:
             p["context"] = jnp.zeros((context, 0))  # stores the context length as a shape
         parts.append(p)
-    return {"root": parts[0], "branches": parts[1:], "head_b": jnp.zeros((classes,))}
+    out = {"root": parts[0], "branches": parts[1:], "head_b": jnp.zeros((classes,))}
+    if emb:
+        assert classes == vocab
+        ek = iter(jax.random.split(jax.random.fold_in(key, 1), 4 * layers + 2))
+        out["emb"], out["out_g"] = _normal(next(ek), (vocab, emb), 0.02), jnp.ones((emb,))
+        for i, p in enumerate(parts):
+            del p["v_tok"]
+            p["q_out"] = _normal(next(ek), (emb, out_rank), out_rank**-0.5)
+            if i > 0:
+                del p["tok"]
+                p["w_v"] = _normal(next(ek), (emb, rank), emb**-0.5)
+        if root_rank:
+            p = parts[0]
+            del p["u_in"]
+            stds = SKEW_STD * (1.0 / SKEW_STD) ** (jnp.arange(g) / max(1, g - 1))
+            p["r_in"] = _normal(next(ek), (emb, root_rank), emb**-0.5)
+            p["g_c"] = _normal(next(ek), (root_rank, n), 0.5 * root_rank**-0.5)
+            p["g_d"] = _normal(next(ek), (root_rank, n), 0.1 * root_rank**-0.5).at[:, :block].set(0.0)
+            p["g_s"] = (_normal(next(ek), (root_rank, g, block, block), 0.5 * root_rank**-0.5)
+                        * stds[:, None, None]).reshape(root_rank, -1)
+    return out
 
 
 def context_leaf(xs, k, vocab, leaves, prev=None):
@@ -96,6 +132,18 @@ def _expm(sk, chunk=16384):
     return out.reshape((-1,) + flat.shape[1:])[:flat.shape[0] - pad].reshape(sk.shape)
 
 
+def _expm_skew(sk, squarings=8, order=8):
+    """expm of skew-symmetric (..., b, b): Taylor of the given order after 2^squarings scaling, then squaring."""
+    x = sk / 2.0**squarings
+    eye = jnp.eye(sk.shape[-1], dtype=sk.dtype)
+    r = eye + x / order
+    for k in range(order - 1, 0, -1):
+        r = eye + x @ r / k
+    for _ in range(squarings):
+        r = r @ r
+    return r
+
+
 def transitions(p):
     """(leaves, n / b, b, b)"""
     sk = 0.5 * (p["skew"] - jnp.swapaxes(p["skew"], -1, -2))
@@ -113,14 +161,19 @@ def _rms(h):
     return h * jax.lax.rsqrt(jnp.mean(jnp.square(h), axis=-1, keepdims=True) + 1e-6)
 
 
-def walk(p, f, beam, tau, mode, key=None, route_noise=0.0):
-    """f (T, B, F) -> leaf ids (T, B, K), weights (T, B, K). Slot 0 is the greedy path."""
+def walk(p, f, beam, tau, mode, key=None, route_noise=0.0, dense=False):
+    """f (T, B, F) -> leaf ids (T, B, K), weights (T, B, K). Slot 0 is the greedy path.
+    dense: score every node once, f W^T (T, B, 2^D - 1), then pick the walked ones."""
     depth = (p["w_node"].shape[0] + 1).bit_length() - 1
     beam = 1 if mode == "hard" else beam
     node = jnp.zeros(f.shape[:2] + (1,), jnp.int32)
     lp = jnp.zeros(f.shape[:2] + (1,), f.dtype)
+    scores = _mm(f, p["w_node"].T) + p["b_node"] if dense else None
     for level in range(depth):
-        s = jnp.einsum("tbf,tbqf->tbq", f, p["w_node"][node]) + p["b_node"][node]
+        if dense:
+            s = jnp.take_along_axis(scores, node, -1)
+        else:
+            s = jnp.einsum("tbf,tbqf->tbq", f, p["w_node"][node]) + p["b_node"][node]
         if key is not None and route_noise > 0:
             s = s + route_noise * jax.random.logistic(jax.random.fold_in(key, level), s.shape)
         cand_lp = jnp.stack([lp + jax.nn.log_sigmoid(-s / tau), lp + jax.nn.log_sigmoid(s / tau)], -1)
@@ -160,12 +213,205 @@ def part(p, leaf, w, xs, low, noise, h0=None):
     return _scan(abar, drive).reshape(shape)
 
 
+def _fold_scan(abar, drive, h0):
+    shape, drive = drive.shape, drive.reshape(abar.shape[:-1])
+    if h0 is not None:  # fold A_1 h0 into the first drive
+        drive = drive.at[0].add(jnp.einsum("b...ij,b...j->b...i", abar[0], h0.reshape(drive.shape[1:])))
+    return _scan(abar, drive).reshape(shape)
+
+
+def part_dense(p, leaf, w, v, low, noise, h0=None):
+    """Branch with leaf weights spread over all leaves, W (T, B, leaves), so every leaf read is one dense matmul
+    instead of a per-token gather. v (T, B, rank) -> states (T, B, n), output P_r h (T, B, out_rank)."""
+    n_leaves, n = p["c"].shape
+    W = jnp.einsum("tbq,tbql->tbl", w, jax.nn.one_hot(leaf, n_leaves, dtype=w.dtype))
+    outer = lambda a: (W[..., None] * a[..., None, :]).reshape(W.shape[:2] + (-1,))
+    flat = lambda u: jnp.swapaxes(u, 1, 2).reshape(-1, n)  # (leaves, n, r) -> (leaves r, n)
+    drive = outer(v) @ flat(p["u_in"]) + W @ p["c"]
+    if "v_low" in p:
+        drive = drive + outer(low @ p["v_low"].T) @ flat(p["u_low"])
+    if noise is not None:
+        drive = drive + noise
+    a = transitions(p)
+    h = _fold_scan((W @ a.reshape(n_leaves, -1)).reshape(W.shape[:2] + a.shape[1:]), drive, h0)
+    y = (h @ jnp.moveaxis(p["p_out"], 2, 0).reshape(n, -1)).reshape(W.shape[:2] + p["p_out"].shape[:2])
+    if p["p_out"].shape[0] == 1:
+        return h, y[:, :, 0]
+    return h, jnp.einsum("tbl,tblr->tbr", W, y)
+
+
+def _mm(a, b):
+    """Large-vocabulary form: a @ b with LM_DTYPE operands and fp32 accumulation and result."""
+    return jnp.matmul(a.astype(LM_DTYPE), b.astype(LM_DTYPE), preferred_element_type=jnp.float32)
+
+
+def _grouped_mm(x, gid, wts, blk=64):
+    """x (R, k), group ids gid (R,), wts (G, k, m) -> (R, m), row i = x_i wts[gid_i]. On GPU: grouped_mm.py (no padding).
+    Otherwise rows are sorted by group and each group is padded to whole blocks of blk rows, so every block is one dense
+    matmul with one gathered weight matrix."""
+    R, G = x.shape[0], wts.shape[0]  # rows with gid >= G give zeros
+    if _use_kernel(None):
+        import grouped_mm
+        if grouped_mm.fits(R, x.shape[1], wts.shape[2]):
+            return grouped_mm.grouped_mm(x, gid, wts, LM_DTYPE)
+    wts = jnp.concatenate([wts, jnp.zeros_like(wts[:1])])
+    gid, G = jnp.minimum(gid, G), G + 1
+    order = jnp.argsort(gid)
+    gs = gid[order]
+    count = jnp.bincount(gid, length=G)
+    padded = -(-count // blk) * blk
+    end = jnp.cumsum(padded)
+    pos = (end - padded)[gs] + jnp.arange(R) - (jnp.cumsum(count) - count)[gs]
+    nb = R // blk + G  # bound on the number of blocks
+    buf = jnp.zeros((nb * blk, x.shape[1]), x.dtype).at[pos].set(x[order])
+    bg = jnp.minimum(jnp.searchsorted(end, jnp.arange(nb) * blk, side="right"), G - 1)
+    y = jnp.einsum("bik,bkm->bim", buf.reshape(nb, blk, -1).astype(LM_DTYPE), wts[bg].astype(LM_DTYPE),
+                   preferred_element_type=jnp.float32).reshape(nb * blk, -1)[pos]
+    return jnp.zeros_like(y).at[order].set(y)
+
+
+def _use_kernel(T):
+    """Pallas kernels (leaf_scan.py, grouped_mm.py): on GPU, with T a multiple of the scan chunk."""
+    import leaf_scan
+    return LM_KERNEL and (T is None or T % leaf_scan.CHUNK == 0) and jax.default_backend() == "gpu"
+
+
+def _scan_table(tab, leaf, w, drive, h0):
+    """States of a branch: A_t = tab[leaf slot 0], straight-through weights w; drive (T, B, n)."""
+    T, B = leaf.shape[:2]
+    x = drive.reshape((T, B) + tab.shape[1:-1])
+    if h0 is not None:
+        x = x.at[0].add(jnp.einsum("b...ij,b...j->b...i", tab[leaf[0, :, 0]], h0.reshape(x.shape[1:])))
+    if _use_kernel(T):
+        import leaf_scan
+        import scan
+        f = scan.table_scan if SCAN_IMPL == "scan" else leaf_scan.leaf_scan
+        return f(tab, leaf.astype(jnp.int32), w, x).reshape(drive.shape)
+    abar = jnp.einsum("tbq,tbq...->tb...", w, tab[leaf])
+    return _scan(abar, x).reshape(drive.shape)
+
+
+def part_grouped(p, leaf, w, v, low, noise, h0=None):
+    """Branch whose K leaf reads per token are grouped matmuls over the (token, slot) rows sorted by leaf; A and c are
+    read as W (T, B, leaves) times the leaf table. v (T, B, rank) -> states (T, B, n), output P_r h (T, B, out_rank)."""
+    n_leaves, n = p["c"].shape
+    T, B, K = leaf.shape
+    W = jnp.einsum("tbq,tbql->tbl", w, jax.nn.one_hot(leaf, n_leaves, dtype=w.dtype))
+    rows = lambda a: jnp.broadcast_to(a[:, :, None], (T, B, K, a.shape[-1])).reshape(T * B * K, -1)
+    mix = lambda y: jnp.einsum("tbq,tbqk->tbk", w, y.reshape(T, B, K, -1))
+    lv = _mm(low, p["v_low"].T) if "v_low" in p else None
+    if leaves.ON and _use_kernel(None) and leaves.fits(v.shape[-1], n, p["p_out"].shape[1]) and \
+            (lv is None or leaves.fits(lv.shape[-1], n)):  # leaves.py; U v + U_low (V_low nu) in one kernel, no concat
+        pln, wf = leaves.plan(leaf.reshape(T * B, K), n_leaves), w.reshape(T * B, K)
+        xs, us = ((v,), (p["u_in"],)) if lv is None else ((v, lv), (p["u_in"], p["u_low"]))
+        drive = leaves.routed_mm(tuple(a.reshape(T * B, -1) for a in xs), us, wf, pln, p["c"], LM_DTYPE)
+        drive = drive.reshape(T, B, n)
+        if noise is not None:
+            drive = drive + noise
+        h = _scan_table(leaves.leaf_blocks(p["skew"], p["d_raw"]), leaf, w, drive, h0)
+        if p["p_out"].shape[0] == 1:
+            return h, _mm(h, p["p_out"][0].T)
+        return h, leaves.routed_mm(h.reshape(T * B, n), p["p_out"], wf, pln, None, LM_DTYPE).reshape(T, B, -1)
+    x, u = (v, p["u_in"]) if lv is None else (jnp.concatenate([v, lv], -1), jnp.concatenate([p["u_in"], p["u_low"]], -1))
+    gid = leaf.reshape(-1)
+    drive = mix(_grouped_mm(rows(x), gid, jnp.swapaxes(u, 1, 2))) + _mm(W, p["c"])
+    if noise is not None:
+        drive = drive + noise
+    h = _scan_table(transitions(p), leaf, w, drive, h0)
+    if p["p_out"].shape[0] == 1:
+        return h, _mm(h, p["p_out"][0].T)
+    return h, mix(_grouped_mm(rows(h), gid, jnp.swapaxes(p["p_out"], 1, 2)))
+
+
+def part_parallel(p, leaf, w, v, low, noise, h0=None):
+    """part_grouped with the leaves sharded by leaf id over MESH and the tokens sharded by batch row. Every device
+    gathers the tokens' rows, runs its own leaves, and the partial drives and outputs are reduce-scattered back to the
+    tokens' devices. The A and c tables are small and gathered whole."""
+    from jax.sharding import PartitionSpec as P
+    ax, keys = "x", [k for k in LEAF_KEYS if k in p]
+    assert p["p_out"].shape[0] > 1 and noise is None
+
+    def f(big, v_low, leaf, w, v, low, h0):
+        nl, n = big["c"].shape
+        K = leaf.shape[-1]
+        gat = lambda a: jax.lax.all_gather(a, ax, axis=1, tiled=True)
+        scat = lambda a: jax.lax.psum_scatter(a, ax, scatter_dimension=1, tiled=True)
+        tab = jax.lax.all_gather(transitions(big), ax, tiled=True)
+        c = jax.lax.all_gather(big["c"], ax, tiled=True)
+        lg, wg = gat(leaf), gat(w)
+        gid = (lg - jax.lax.axis_index(ax) * nl).reshape(-1)
+        gid = jnp.where((gid >= 0) & (gid < nl), gid, nl)
+        rows = lambda a: jnp.broadcast_to(a[:, :, None], a.shape[:2] + (K, a.shape[-1])).reshape(-1, a.shape[-1])
+        mix = lambda y: jnp.einsum("tbq,tbqk->tbk", wg, y.reshape(wg.shape + (-1,)))
+        x, u = v, big["u_in"]
+        if v_low is not None:
+            x, u = jnp.concatenate([v, _mm(low, v_low.T)], -1), jnp.concatenate([u, big["u_low"]], -1)
+        W = jnp.einsum("tbq,tbql->tbl", w, jax.nn.one_hot(leaf, c.shape[0], dtype=w.dtype))
+        drive = scat(mix(_grouped_mm(rows(gat(x)), gid, jnp.swapaxes(u, 1, 2)))) + _mm(W, c)
+        h = _scan_table(tab, leaf, w, drive, h0)
+        y = scat(mix(_grouped_mm(rows(gat(h)), gid, jnp.swapaxes(big["p_out"], 1, 2))))
+        return h, y
+
+    tok = P(None, ax)
+    args = ({k: p[k] for k in keys}, p.get("v_low"), leaf, w, v, low, h0)
+    specs = ({k: P(ax) for k in keys}, None if p.get("v_low") is None else P(), tok, tok, tok, tok,
+             None if h0 is None else P(ax))
+    return jax.shard_map(f, mesh=MESH, in_specs=specs, out_specs=(tok, tok), check_vma=False)(*args)
+
+
+def leaf_sharding(params):
+    """NamedShardings for params over MESH: branch leaf arrays and tree levels with at least one node per device are
+    split along the leaf axis, everything else is replicated."""
+    from jax.sharding import NamedSharding, PartitionSpec as P
+    nd = MESH.devices.size
+
+    def spec(path, x):
+        keys = [str(getattr(k, "key", "")) for k in path]
+        split = "branches" in keys and any(k in LEAF_KEYS for k in keys) and x.shape[0] % nd == 0
+        return NamedSharding(MESH, P("x") if split and x.shape[0] >= nd else P())
+    return jax.tree_util.tree_map_with_path(spec, params)
+
+
+def root_dense(p, z, noise, h0=None, ids=None, max_distinct=None):
+    """Root with a rank-r leaf table: leaf x = base + z(x) G, z (T, B, r). -> states, output P h."""
+    if leaves.ON and ids is not None and _use_kernel(z.shape[0]):  # leaves.py: blocks once per distinct token id
+        tab, idx = leaves.token_blocks(p["skew"][0], p["d_raw"][0], p["g_s"], p["g_d"], z, ids, LM_DTYPE,
+                                       max_distinct=max_distinct)
+        drive = p["c"][0] + _mm(z, p["g_c"])
+        if noise is not None:
+            drive = drive + noise
+        h = _scan_table(tab, idx[..., None], jnp.ones(idx.shape + (1,), drive.dtype), drive, h0)
+        return h, _mm(h, p["p_out"][0].T)
+    sk = p["skew"][0] + _mm(z, p["g_s"]).reshape(z.shape[:2] + p["skew"].shape[1:])
+    sk = 0.5 * (sk - jnp.swapaxes(sk, -1, -2))
+    d = p["d_raw"][0] + _mm(z, p["g_d"])
+    a = jnp.clip(d, -1.0, 1.0).reshape(sk.shape[:-1])[..., None] * jax.checkpoint(_expm_skew)(sk)
+    drive = p["c"][0] + _mm(z, p["g_c"])
+    if noise is not None:
+        drive = drive + noise
+    if _use_kernel(z.shape[0]):
+        import leaf_scan
+        x = drive.reshape(a.shape[:-1])
+        if h0 is not None:
+            x = x.at[0].add(jnp.einsum("b...ij,b...j->b...i", a[0], h0.reshape(x.shape[1:])))
+        h = leaf_scan.token_scan(a, x).reshape(drive.shape)
+    else:
+        h = _fold_scan(a, drive, h0)
+    return h, _mm(h, p["p_out"][0].T)
+
+
 def forward(params, tokens, beam=8, tau=ROUTE_TAU, mode="hard", key=None, route_noise=0.0, noise_std=0.0, state=None,
-            return_state=False, prev=None):
-    """tokens (B, T) -> log-probs (B, T, classes). mode: "hard" or "st" (straight-through beam gradient)."""
+            return_state=False, prev=None, remat=False, targets=None, max_distinct=None):
+    """tokens (B, T) -> log-probs (B, T, classes). mode: "hard" or "st" (straight-through beam gradient).
+    targets (B, T), with --emb only: return -log p(targets) (B, T) from a chunked cross-entropy instead.
+    max_distinct, with --emb: rows of the root table (distinct token ids it holds); None: root_cap(tokens, vocab).
+    A batch with more distinct ids than this is wrong for the extra ids; train() checks every batch."""
     xs = jnp.swapaxes(tokens, 0, 1)
     parts = [params["root"]] + [leaf_table(p) for p in params["branches"]]
     low, logits, last = None, params["head_b"], []
+    if "emb" in params:
+        return _forward_emb(params, xs, parts, beam, tau, mode, key, route_noise, noise_std, state, return_state, remat,
+                            targets, max_distinct)
     for i, p in enumerate(parts):
         pkey = None if key is None else jax.random.fold_in(key, i)
         noise = None
@@ -183,6 +429,49 @@ def forward(params, tokens, beam=8, tau=ROUTE_TAU, mode="hard", key=None, route_
         low = _rms(h)
         out = leaf if p["p_out"].shape[0] > 1 else 0 * leaf
         logits = logits + jnp.einsum("tbq,tbqrk,tbk->tbr", w, p["p_out"][out], h) @ p["q_out"].T
+    logp = jnp.swapaxes(jax.nn.log_softmax(logits, -1), 0, 1)
+    return (logp, last) if return_state else logp
+
+
+def root_cap(tokens, vocab):
+    """Default root-table rows for a micro-batch of `tokens` positions (leaves.distinct_cap)."""
+    return leaves.distinct_cap(tokens, vocab)
+
+
+def _forward_emb(params, xs, parts, beam, tau, mode, key, route_noise, noise_std, state, return_state, remat,
+                 targets=None, max_distinct=None):
+    """forward with the shared, tied embedding (init emb > 0)."""
+    e = _rms(params["emb"][xs])
+    part_lm = part_parallel if MESH is not None else part_grouped if LEAF_MM == "grouped" else part_dense
+    root_f, part_f = (jax.checkpoint(root_dense, static_argnums=(5,)), jax.checkpoint(part_lm)) if remat else \
+        (root_dense, part_lm)
+    md = max_distinct or root_cap(xs.size, params["emb"].shape[0])
+    low, o, last = None, 0.0, []
+    for i, p in enumerate(parts):
+        pkey = None if key is None else jax.random.fold_in(key, i)
+        noise = None
+        if pkey is not None and noise_std > 0:
+            noise = noise_std * jax.random.normal(jax.random.fold_in(pkey, 2), xs.shape + p["c"].shape[-1:])
+        h0 = None if state is None else state[i]
+        if i == 0:
+            h, y = root_f(p, _mm(e, p["r_in"]), noise, h0, xs, md)
+        else:
+            f = e if p["w_node"].shape[1] == e.shape[-1] else jnp.concatenate([e, low], -1)
+            leaf, w = walk(p, f, beam, tau, mode, None if pkey is None else jax.random.fold_in(pkey, 1), route_noise,
+                           dense=True)
+            h, y = part_f(p, leaf, w, _mm(e, p["w_v"]), low, noise, h0)
+        last.append(h[-1])
+        low = _rms(h)
+        o = o + _mm(y, p["q_out"].T)
+    hf = _rms(o) * params["out_g"]
+    if targets is not None:
+        import head  # fused chunked cross-entropy: no (tokens, vocab) logits stored
+        impl = "pallas" if _use_kernel(None) and LM_DTYPE == jnp.bfloat16 else "chunk"
+        nll = head.fused_ce(hf, params["emb"], params["head_b"], jnp.swapaxes(targets, 0, 1), dtype=LM_DTYPE,
+                            return_per_token=True, impl=impl)
+        nll = jnp.swapaxes(nll, 0, 1)
+        return (nll, last) if return_state else nll
+    logits = _mm(hf, params["emb"].T) + params["head_b"]
     logp = jnp.swapaxes(jax.nn.log_softmax(logits, -1), 0, 1)
     return (logp, last) if return_state else logp
 
@@ -265,7 +554,8 @@ STATE_TASKS = {  # name: (generator, train length, test length)
     "cycle_navigation": (Cycle, 40, 256),
     "modular_arithmetic": (ModArith, 40, 256),
 }
-LM_TASKS = {"enwik8": 256, "hg38": 5}  # name: vocabulary (hg38: A C G T = 0..3, N = 4)
+LM_TASKS = {"enwik8": 256, "hg38": 5, "fineweb_edu": 50257, "fineweb_edu_1b": 50257,
+            "fineweb_edu_3b": 50257}  # name: vocabulary (hg38: A C G T = 0..3, N = 4; fineweb_edu: GPT-2)
 CLF_TASKS = {"dummy_mouse_enhancers_ensembl": 2, "demo_coding_vs_intergenomic_seqs": 2, "demo_human_or_worm": 2,
              "human_enhancers_cohn": 2, "human_enhancers_ensembl": 2, "human_ensembl_regulatory": 3,
              "human_nontata_promoters": 2, "human_ocr_ensembl": 2}  # Genomic Benchmarks: name: classes
@@ -306,13 +596,20 @@ class StateTask:
 
 
 class LMTask:
-    """Next-token bits per token. enwik8: 90M / 5M / 5M split; hg38: HyenaDNA split."""
+    """Next-token bits per token. enwik8: 90M / 5M / 5M split; hg38: HyenaDNA split.
+    fineweb_edu: nats per token; val.bin (10M held-out tokens) gives val from its first half, test from its second."""
     higher = False
 
     def __init__(self, name, cfg):
+        self.metric, self.unit, self.chunk = "val_bpc", LN2, 64
         if name == "enwik8":
             raw = np.frombuffer((ROOT / "data" / name).read_bytes(), np.uint8)
             self.train, val, test = raw[:90_000_000], raw[90_000_000:95_000_000], raw[95_000_000:]
+        elif name.startswith("fineweb_edu"):  # fineweb_edu_1b, _3b: same val.bin, 1.05B or 2.99B training tokens
+            d = ROOT / "data" / name
+            self.train, held = (np.memmap(d / f"{s}.bin", np.uint16, "r") for s in ("train", "val"))
+            val, test = held[:len(held) // 2], held[len(held) // 2:]
+            self.metric, self.unit, self.chunk = "val_nats", 1.0, 16
         else:
             self.train, val, test = (np.memmap(ROOT / "data" / name / f"{s}.u8", np.uint8, "r")
                                      for s in ("train", "valid", "test"))
@@ -338,9 +635,9 @@ class LMTask:
         return x, y, np.ones((size, self.T), np.float32), prefix, use
 
     def evaluate(self, nll_fn, params, split):
-        x, y = self.sets[split]
-        nll = sum(float(nll_fn(params, x[i:i + 64], y[i:i + 64])) for i in range(0, len(x), 64))
-        return nll / y.size / LN2
+        x, y, c = *self.sets[split], self.chunk
+        nll = sum(float(nll_fn(params, x[i:i + c], y[i:i + c])) for i in range(0, len(x), c))
+        return nll / y.size / self.unit
 
     def evaluate_stream(self, params, split, chunk=16384, limit=0):
         """Bits per token over the split as one stream, states carried across chunks."""
@@ -411,6 +708,8 @@ class ClfTask:
 # -------------------------------------------------------------------------------------------------------- training
 
 LEAF_KEYS = ("u_in", "c", "p_out", "skew", "d_raw", "u_low")
+DECAYED = ("emb", "u_in", "u_low", "p_out", "q_out", "w_v", "v_low", "w_node", "r_in", "g_c")  # weight decay:
+# dense maps and the embedding; not the transitions (skew, d_raw and their generators), biases or the norm gain
 
 
 def to_tree(p, depth):
@@ -428,12 +727,34 @@ def leaf_table(p):
     out = {k: v for k, v in p.items() if k != "levels"}
     for k, levels in p["levels"].items():
         depth = len(levels) - 1
+        if leaves.ON:  # same sum, one tree level at a time in the backward
+            out[k] = leaves.tree_sum(list(levels))
+            continue
         out[k] = (depth + 1) ** -0.5 * sum(jnp.repeat(lv, 2**(depth - d), axis=0) for d, lv in enumerate(levels))
     return out
 
 
 def fold_tree(params):
     return dict(params, branches=[leaf_table(p) for p in params["branches"]])
+
+
+def init_lm(cfg, vocab):
+    """Large-vocabulary params as trees of increments, built in one jit (sharded over MESH when set) without drawing
+    the leaves that to_tree discards. -> params, stored parameter count of the folded leaf tables."""
+    def make(key):
+        p = init(key, vocab, vocab, cfg.n, cfg.block, cfg.depth, cfg.layers, cfg.feat, cfg.rank, cfg.out_rank,
+                 cfg.lower_rank, cfg.shared_out, "dyn", 1, 16, cfg.emb, cfg.root_rank, branch_leaves=1)
+        return dict(p, branches=[to_tree(q, cfg.depth) for q in p["branches"]])
+    key = jax.random.PRNGKey(cfg.seed)
+    shapes = jax.eval_shape(make, key)
+    count = 0
+    for q in [shapes["root"], shapes["emb"], shapes["head_b"], shapes["out_g"]] + shapes["branches"]:
+        q = dict(q) if isinstance(q, dict) else {"x": q}
+        levels = q.pop("levels", {})
+        count += sum(int(np.prod(v.shape)) for v in jax.tree_util.tree_leaves(q))
+        count += sum(2**cfg.depth * int(np.prod(lv[0].shape[1:])) for lv in levels.values())
+    out = None if MESH is None else leaf_sharding(shapes)
+    return jax.jit(make, out_shardings=out)(key), count
 
 
 def save(path, params):
@@ -443,38 +764,88 @@ def save(path, params):
 
 
 def train(cfg):
+    global LM_DTYPE, LM_KERNEL, MESH
+    LM_DTYPE, LM_KERNEL = getattr(jnp, cfg.dtype), cfg.kernels
+    if cfg.leaf_shards > 1:
+        MESH = jax.sharding.Mesh(np.array(jax.devices()[:cfg.leaf_shards]), ("x",))
     lm = cfg.task in LM_TASKS
     task = LMTask(cfg.task, cfg) if lm else ClfTask(cfg.task, cfg.seed) if cfg.task in CLF_TASKS else \
         StateTask(cfg.task, cfg.seed)
-    params = init(jax.random.PRNGKey(cfg.seed), task.vocab, task.classes, cfg.n, cfg.block, cfg.depth, cfg.layers,
-                  cfg.feat, cfg.rank, cfg.out_rank, cfg.lower_rank, cfg.shared_out, cfg.branch, cfg.context_len,
-                  cfg.context_bits)
-    n_params = int(sum(np.prod(v.shape) for v in jax.tree_util.tree_leaves(params)))
-    params["branches"] = [to_tree(p, cfg.depth) for p in params["branches"]]
+    tok_sharding = None
+    if cfg.emb:
+        params, n_params = init_lm(cfg, task.vocab)
+        if MESH is not None:
+            tok_sharding = jax.sharding.NamedSharding(MESH, jax.sharding.PartitionSpec("x"))
+    else:
+        params = init(jax.random.PRNGKey(cfg.seed), task.vocab, task.classes, cfg.n, cfg.block, cfg.depth, cfg.layers,
+                      cfg.feat, cfg.rank, cfg.out_rank, cfg.lower_rank, cfg.shared_out, cfg.branch, cfg.context_len,
+                      cfg.context_bits)
+        n_params = int(sum(np.prod(v.shape) for v in jax.tree_util.tree_leaves(params)))
+        params["branches"] = [to_tree(p, cfg.depth) for p in params["branches"]]
     warmup = min(1000, cfg.steps // 10) if cfg.warmup_frac is None else int(round(cfg.warmup_frac * cfg.steps))
     sched = optax.warmup_cosine_decay_schedule(0.0, cfg.lr, warmup, cfg.steps, cfg.lr * 0.01)
-    opt = optax.apply_if_finite(optax.chain(optax.clip_by_global_norm(1.0), optax.adam(sched)), 1000)
+    fast = cfg.emb and cfg.opt == "fast"
+    if fast:  # large-vocabulary form: one pass per array, m and v in bf16 (sparse_opt.py)
+        import sparse_opt
+        opt = sparse_opt.FastAdam(sched, b2=cfg.beta2, clip=1.0, mu_dtype=jnp.bfloat16, nu_dtype=jnp.bfloat16,
+                                  branch_lr=cfg.branch_lr, weight_decay=cfg.weight_decay,
+                                  decay=lambda keys: any(k in DECAYED for k in keys))
+    elif cfg.weight_decay or cfg.beta2 != 0.999:  # AdamW as the baselines run it: decay on arrays of rank >= 2
+        decay = lambda p: jax.tree_util.tree_map(lambda x: x.ndim >= 2, p)
+        opt = optax.apply_if_finite(optax.chain(optax.clip_by_global_norm(1.0), optax.adamw(
+            sched, b2=cfg.beta2, weight_decay=cfg.weight_decay, mask=decay)), 1000)
+    else:
+        opt = optax.apply_if_finite(optax.chain(optax.clip_by_global_norm(1.0), optax.adam(sched)), 1000)
     opt_state = opt.init(params)
 
-    def loss_fn(p, x, y, m, key, prefix=None, use=None):
+    def loss_fn(p, x, y, m, key, prefix=None, use=None, md=None):
         state = None
         if prefix is not None:
             last = forward(p, prefix, cfg.beam, ROUTE_TAU, "st", jax.random.fold_in(key, 7), cfg.route_noise,
                            cfg.state_noise, return_state=True)[1]
             state = [jax.lax.stop_gradient(h) * use[:, None] for h in last]
-        logp = forward(p, x, cfg.beam, ROUTE_TAU, "st", key, cfg.route_noise, cfg.state_noise, state=state)
+        if cfg.emb:
+            nll = forward(p, x, cfg.beam, ROUTE_TAU, "st", key, cfg.route_noise, cfg.state_noise, state=state,
+                          remat=cfg.remat, targets=y, max_distinct=md)
+            return (nll * m / m.sum()).sum()
+        logp = forward(p, x, cfg.beam, ROUTE_TAU, "st", key, cfg.route_noise, cfg.state_noise, state=state,
+                       remat=cfg.remat)
         return -(jnp.take_along_axis(logp, y[..., None], -1)[..., 0] * m / m.sum()).sum()
 
-    @jax.jit
-    def step(p, s, x, y, m, key, prefix=None, use=None):
-        ce, g = jax.value_and_grad(loss_fn)(p, x, y, m, key, prefix, use)
+    def grad_fn(p, x, y, m, key, prefix=None, use=None, md=None):
+        if fast and MESH is None:  # gradient of the folded leaf tables; FastAdam forms the level gradients itself
+            p = fold_tree(p)
+        if cfg.accum == 1:
+            return jax.value_and_grad(loss_fn)(p, x, y, m, key, prefix, use, md)
+        assert prefix is None, "--accum without --carry"
+        split = lambda a: a.reshape((cfg.accum, -1) + a.shape[1:])
+
+        def body(acc, mb):  # equal-size micro-batches, mean of their losses
+            ce, g = jax.value_and_grad(loss_fn)(p, *mb[:3], jax.random.fold_in(key, mb[3]), md=md)
+            return jax.tree_util.tree_map(jnp.add, acc, (ce, g)), None
+
+        zero = (jnp.zeros(()), jax.tree_util.tree_map(jnp.zeros_like, p))
+        (ce, g), _ = jax.lax.scan(body, zero, (split(x), split(y), split(m), jnp.arange(cfg.accum)))
+        return jax.tree_util.tree_map(lambda v: v / cfg.accum, (ce, g))
+
+    def step(p, s, x, y, m, key, prefix=None, use=None, md=None):
+        ce, g = grad_fn(p, x, y, m, key, prefix, use, md)
+        if fast:
+            p, s, _ = opt.step(p, g, s)
+            return p, s, ce
         u, s = opt.update(g, s, p)
         if cfg.branch_lr != 1.0:
             u = dict(u, branches=jax.tree_util.tree_map(lambda v: v * cfg.branch_lr, u["branches"]))
         return optax.apply_updates(p, u), s, ce
 
+    step = jax.jit(step, donate_argnums=(0, 1) if fast else (), static_argnames=("md",))  # update in place
+    micro = cfg.batch // cfg.accum * cfg.T
+    cap = root_cap(micro, task.vocab) if cfg.emb else None
+    distinct = {"max": 0, "over": 0}  # root table: most distinct ids in a micro-batch, steps run with the full table
     predict = jax.jit(lambda p, x: forward(p, x, mode="hard").argmax(-1))
-    nll = jax.jit(lambda p, x, y: -jnp.take_along_axis(forward(p, x, mode="hard"), y[..., None], -1).sum())
+    nll = jax.jit(lambda p, x, y: forward(p, x, mode="hard", targets=y, max_distinct=min(x.size, task.vocab)).sum()
+                  if cfg.emb else
+                  -jnp.take_along_axis(forward(p, x, mode="hard"), y[..., None], -1).sum())
 
     name = f"{cfg.task}_D{cfg.depth}_n{cfg.n}_b{cfg.block}_K{cfg.beam}" + ("" if cfg.branch == "dyn" else f"_{cfg.branch}") \
         + ("" if cfg.context_len == 1 else f"_k{cfg.context_len}") + f"{cfg.tag}_s{cfg.seed}"
@@ -494,13 +865,26 @@ def train(cfg):
             x, y, m, prefix, use = task.carry_batch(rng, cfg.batch, cfg.carry)
         else:
             x, y, m = task.batch(rng, cfg.batch)
+            if tok_sharding is not None:
+                x, y, m = jax.device_put((x, y, m), tok_sharding)
+        md = None
+        if cfg.emb:  # a micro-batch with more distinct ids than the root table holds runs with the full table
+            most = max(len(np.unique(c)) for c in np.asarray(x).reshape(cfg.accum, -1))
+            distinct["max"] = max(distinct["max"], most)
+            if most > cap:
+                md, distinct["over"] = min(micro, task.vocab), distinct["over"] + 1
         params, opt_state, ce = step(params, opt_state, x, y, m, jax.random.PRNGKey(cfg.seed * 1_000_003 + it),
-                                     prefix, use)
+                                     prefix, use, md=md)
         if it % cfg.eval_every and it != cfg.steps:
             continue
         rec = {"step": it, "loss": float(ce), "time_s": round(time.time() - t0, 1)}
+        if cfg.emb:
+            rec.update(root_rows=cap, distinct_max=distinct["max"], full_table_steps=distinct["over"])
         if lm:
-            rec["val_bpc"] = val = task.evaluate(nll, params, "val")
+            rec[task.metric] = val = task.evaluate(nll, params, "val")
+            if task.unit == 1.0:
+                rec["val_ppl"] = float(np.exp(val))
+            rec["tokens"] = it * cfg.batch * cfg.T
             better = val < best["val"]
             if cfg.stream_val > 0:
                 rec["val_stream"] = task.evaluate_stream(params, "val", cfg.stream_chunk, cfg.stream_val)[0]
@@ -526,8 +910,10 @@ def train(cfg):
     if "val_stream" in best:
         res["val_stream"] = best["val_stream"]
     if "params" in best:
-        res["test"] = task.evaluate(nll if lm else predict, best["params"], "test")
-        save(out.with_suffix(".npz"), fold_tree(best["params"]))
+        del params, opt_state  # room for the best parameters on the device
+        res["test"] = task.evaluate(nll if lm else predict, jax.device_put(best["params"]), "test")
+        if cfg.save:
+            save(out.with_suffix(".npz"), fold_tree(best["params"]))
         if lm and cfg.stream_test:
             res["test_stream"], res["test_stream_tokens"] = task.evaluate_stream(best["params"], "test",
                                                                                   cfg.stream_chunk)
@@ -624,11 +1010,22 @@ def parser():
     add("--branch", default="dyn", choices=["dyn", "out", "tok"])
     add("--context_len", type=int, default=1)
     add("--context_bits", type=int, default=16)
+    add("--emb", type=int, default=0, help="shared token embedding tied to the head (large vocabularies)")
+    add("--root_rank", type=int, default=0, help="rank of the root leaf table (with --emb)")
+    add("--accum", type=int, default=1, help="micro-batches per step")
+    add("--remat", type=_flag, default=False, help="recompute each layer in the backward pass")
+    add("--dtype", default="bfloat16", choices=["bfloat16", "float32"], help="with --emb: matmul operand type")
+    add("--kernels", type=_flag, default=True, help="with --emb: Pallas scan and grouped matmul kernels on GPU")
+    add("--opt", default="fast", choices=["fast", "optax"], help="with --emb: sparse_opt.FastAdam (bf16 m, v) or optax")
+    add("--leaf_shards", type=int, default=1, help="with --emb: devices that split the branch leaves by leaf id")
     add("--steps", type=int, default=40_000)
     add("--batch", type=int, default=256)
     add("--T", type=int, default=256)
     add("--lr", type=float, default=1e-3)
     add("--branch_lr", type=float, default=1.0)
+    add("--weight_decay", type=float, default=0.0,
+        help="decoupled; on the dense maps and embedding with --emb, else on arrays of rank >= 2")
+    add("--beta2", type=float, default=0.999)
     add("--beam", type=int, default=8)
     add("--route_noise", type=float, default=0.05)
     add("--state_noise", type=float, default=0.0)
@@ -643,6 +1040,7 @@ def parser():
     add("--out", default=str(ROOT / "results"))
     add("--tag", default="")
     add("--wandb", type=_flag, default=False)
+    add("--save", type=_flag, default=True, help="write the best parameters (.npz)")
     return ap
 
 

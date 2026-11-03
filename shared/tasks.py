@@ -87,7 +87,8 @@ STATE_TASKS = {  # name: (generator, train length, test length)
     "cycle_navigation": (Cycle, 40, 256),
     "modular_arithmetic": (ModArith, 40, 256),
 }
-LM_TASKS = {"enwik8": 256, "hg38": 5}  # name: vocabulary (hg38: A C G T = 0..3, N = 4)
+LM_TASKS = {"enwik8": 256, "hg38": 5, "fineweb_edu": 50257, "fineweb_edu_1b": 50257,
+            "fineweb_edu_3b": 50257}  # name: vocabulary (hg38: A C G T = 0..3, N = 4; fineweb_edu: GPT-2)
 CLF_TASKS = {"dummy_mouse_enhancers_ensembl": 2, "demo_coding_vs_intergenomic_seqs": 2, "demo_human_or_worm": 2,
              "human_enhancers_cohn": 2, "human_enhancers_ensembl": 2, "human_ensembl_regulatory": 3,
              "human_nontata_promoters": 2, "human_ocr_ensembl": 2}  # Genomic Benchmarks: name: classes

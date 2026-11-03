@@ -1,4 +1,4 @@
-"""Llama-style decoder baseline: pre-RMSNorm, RoPE, SwiGLU, untied head."""
+"""Llama-style decoder baseline: pre-RMSNorm, RoPE, SwiGLU, untied head (--tie true ties it)."""
 # Upstream: transformers 4.57.6 LlamaForCausalLM (Apache-2.0) with flash-attn 2.8.3.post2 (BSD-3-Clause), unmodified.
 import math
 import sys
@@ -24,7 +24,7 @@ def add_args(ap):
 
 
 class Transformer(nn.Module):
-    def __init__(self, vocab, classes, d, layers, head_dim, max_len, attn="flash_attention_2"):
+    def __init__(self, vocab, classes, d, layers, head_dim, max_len, attn="flash_attention_2", tie=False):
         super().__init__()
         from transformers import LlamaConfig, LlamaForCausalLM
         self.classes = classes
@@ -32,18 +32,23 @@ class Transformer(nn.Module):
                           num_hidden_layers=layers, num_attention_heads=d // head_dim,
                           num_key_value_heads=d // head_dim, head_dim=head_dim, max_position_embeddings=max_len,
                           rms_norm_eps=1e-5, rope_theta=1e4, attention_bias=False, mlp_bias=False,
-                          attention_dropout=0.0, tie_word_embeddings=False, initializer_range=0.02, use_cache=False)
+                          attention_dropout=0.0, tie_word_embeddings=tie, initializer_range=0.02, use_cache=False)
         self.model = LlamaForCausalLM._from_config(cfg, attn_implementation=attn, dtype=torch.float32)
 
     def forward(self, tokens):
         return self.model(input_ids=tokens, use_cache=False).logits[..., :self.classes]
+
+    def hidden(self, tokens):
+        """(final hidden states, head weight) for a fused cross-entropy (trainer --fused_ce)."""
+        return self.model.model(input_ids=tokens, use_cache=False).last_hidden_state, \
+            self.model.lm_head.weight[:self.classes]
 
 
 def build(cfg, vocab, classes):
     if cfg.d % cfg.head_dim:
         raise ValueError(f"d = {cfg.d} not divisible by head_dim {cfg.head_dim}")
     return Transformer(vocab, classes, cfg.d, cfg.layers, cfg.head_dim, cfg.max_len,
-                       getattr(cfg, "attn", "flash_attention_2"))
+                       getattr(cfg, "attn", "flash_attention_2"), getattr(cfg, "tie", False))
 
 
 if __name__ == "__main__":

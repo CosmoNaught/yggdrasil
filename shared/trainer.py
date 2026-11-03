@@ -25,20 +25,26 @@ sys.path.insert(0, str(HERE))
 import tasks  # noqa: E402
 
 LN2 = math.log(2.0)
-DEFAULT_STEPS = {"s5_word": 80_000, "a5_word": 80_000, "enwik8": 10_000, "hg38": 10_000}  # others 40_000
+DEFAULT_STEPS = {"s5_word": 80_000, "a5_word": 80_000, "enwik8": 10_000, "hg38": 10_000, "fineweb_edu": 10_000}  # others 40_000
 torch.backends.cuda.matmul.allow_tf32 = False
 torch.backends.cudnn.allow_tf32 = False
 torch.set_float32_matmul_precision("highest")
 
 
 class LMTask:
-    """enwik8 or hg38, evaluated in windows of T, bits per token."""
+    """enwik8 or hg38, evaluated in windows of T, bits per token. fineweb_edu (GPT-2 tokens): nats per token; val.bin
+    (10M held-out tokens) gives val from its first half, test from its second."""
 
     def __init__(self, name, T, val_windows, test_chars):
         data = ROOT / "data"
+        self.metric, self.unit = "val_bpc", LN2
         if name == "enwik8":
             raw = np.frombuffer((data / name).read_bytes(), np.uint8)
             self.train, val, test = raw[:90_000_000], raw[90_000_000:95_000_000], raw[95_000_000:]
+        elif name.startswith("fineweb_edu"):  # fineweb_edu_1b, _3b: same val.bin, 1.05B or 2.99B training tokens
+            self.train, held = (np.memmap(data / name / f"{s}.bin", np.uint16, "r") for s in ("train", "val"))
+            val, test = held[:len(held) // 2], held[len(held) // 2:]
+            self.metric, self.unit = "val_nats", 1.0
         else:
             self.train, val, test = (np.memmap(data / name / f"{s}.u8", np.uint8, "r") for s in ("train", "valid", "test"))
         self.vocab = self.classes = tasks.LM_TASKS[name]
@@ -58,7 +64,50 @@ class LMTask:
     def evaluate(self, nll_fn, split, chunk=64):
         x, y = self.sets[split]
         nll = sum(float(nll_fn(x[i:i + chunk], y[i:i + chunk])) for i in range(0, len(x), chunk))
-        return nll / y.size / LN2
+        return nll / y.size / self.unit
+
+
+class ChunkedCE(torch.autograd.Function):
+    """-log softmax(h W^T)[y] per row, in chunks of rows: the (rows, vocab) logits are never stored for the whole
+    batch; the backward recomputes each chunk. Matmuls in `dtype` with fp32 log-sum-exp and fp32 gradients of W."""
+
+    @staticmethod
+    def forward(ctx, h, w, y, chunk, dtype):
+        loss, lse = torch.empty(h.shape[0], device=h.device), torch.empty(h.shape[0], device=h.device)
+        wd = w.to(dtype)
+        for i in range(0, h.shape[0], chunk):
+            z = (h[i:i + chunk].to(dtype) @ wd.T).float()
+            lse[i:i + chunk] = torch.logsumexp(z, -1)
+            loss[i:i + chunk] = lse[i:i + chunk] - z.gather(1, y[i:i + chunk, None])[:, 0]
+        ctx.save_for_backward(h, w, y, lse)
+        ctx.chunk, ctx.dtype = chunk, dtype
+        return loss
+
+    @staticmethod
+    def backward(ctx, g):
+        h, w, y, lse = ctx.saved_tensors
+        dt, wd = ctx.dtype, w.to(ctx.dtype)
+        dh, dw = torch.empty_like(h), torch.zeros(w.shape, dtype=torch.float32, device=w.device)
+        for i in range(0, h.shape[0], ctx.chunk):
+            hc = h[i:i + ctx.chunk].to(dt)
+            p = torch.exp((hc @ wd.T).float() - lse[i:i + ctx.chunk, None])
+            p.scatter_add_(1, y[i:i + ctx.chunk, None], -torch.ones_like(p[:, :1]))
+            p = (p * g[i:i + ctx.chunk, None]).to(dt)
+            dh[i:i + ctx.chunk] = (p @ wd).to(h.dtype)
+            dw += (p.T @ hc).float()
+        return dh, dw.to(w.dtype), None, None, None
+
+
+def chunked_ce(h, w, y, chunk=8192, dtype=torch.bfloat16):
+    """h (..., d), w (V, d), y (...) -> per-token loss (...) in fp32."""
+    return ChunkedCE.apply(h.reshape(-1, h.shape[-1]), w, y.reshape(-1), chunk, dtype).reshape(y.shape)
+
+
+@torch.compile
+def compiled_ce(h, w, y, dtype=torch.bfloat16):
+    """Per-token cross-entropy of h w^T (dtype matmul, fp32 logits), head and loss compiled into fused kernels."""
+    z = torch.matmul(h.to(dtype), w.to(dtype).T).float()
+    return F.cross_entropy(z.reshape(-1, z.shape[-1]), y.reshape(-1), reduction="none").reshape(y.shape)
 
 
 def _flag(v):
@@ -87,6 +136,11 @@ def parser(model, add_args):
     add("--tag", default="")
     add("--wandb", type=_flag, default=False)
     add("--project", default="yggdrasil-baselines")
+    add("--amp", default="", choices=("", "bf16", "fp32"), help="override the model's autocast dtype")
+    add("--tie", type=_flag, default=False, help="tie the head to the token embedding")
+    add("--fused_ce", type=_flag, default=False, help="chunked cross-entropy from the final hidden states (LM tasks)")
+    add("--compile_ce", type=_flag, default=False, help="torch.compile of the head and cross-entropy (LM tasks)")
+    add("--save", type=_flag, default=True, help="write the best weights (ckpt.pt)")
     add_args(ap)
     return ap
 
@@ -147,8 +201,20 @@ def train(model_name, build, a, amp=None):
     def predict(x):
         return fwd(torch.as_tensor(x, device=dev, dtype=torch.long)).argmax(-1).cpu().numpy()
 
+    fused = (a.fused_ce or a.compile_ce) and lm and hasattr(model, "hidden")
+
+    def token_loss(x, y):  # (B, T) fp32 per-token loss through the chunked or compiled cross-entropy
+        with torch.autocast(dev.type, dtype=amp or torch.float32, enabled=amp is not None):
+            h, w = model.hidden(x)
+        if a.compile_ce:
+            return compiled_ce(h, w, y, amp or torch.float32)
+        return chunked_ce(h, w, y, dtype=amp or torch.float32)
+
     @torch.no_grad()
     def nll(x, y):
+        if fused:
+            return token_loss(torch.as_tensor(x, device=dev, dtype=torch.long),
+                              torch.as_tensor(y, device=dev, dtype=torch.long)).sum().item()
         lg = fwd(torch.as_tensor(x, device=dev, dtype=torch.long))
         return F.cross_entropy(lg.reshape(-1, C), torch.as_tensor(y, device=dev, dtype=torch.long).reshape(-1),
                                reduction="sum").item()
@@ -165,9 +231,12 @@ def train(model_name, build, a, amp=None):
     model.train()
     for it in range(1, a.steps + 1):
         x, y, m = (torch.as_tensor(v, device=dev) for v in task.batch(rng, a.batch))
-        lg = fwd(x.long())
         w = m / m.sum()
-        loss = (F.cross_entropy(lg.reshape(-1, C), y.long().reshape(-1), reduction="none") * w.reshape(-1)).sum()
+        if fused:
+            loss = (token_loss(x.long(), y.long()) * w).sum()
+        else:
+            lg = fwd(x.long())
+            loss = (F.cross_entropy(lg.reshape(-1, C), y.long().reshape(-1), reduction="none") * w.reshape(-1)).sum()
         opt.zero_grad(set_to_none=True)
         loss.backward()
         gn = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -185,7 +254,10 @@ def train(model_name, build, a, amp=None):
             continue
         rec = {"step": it, "loss": ce, "skipped": it - k, "time_s": round(time.time() - t0, 1)}
         if lm:
-            rec["val_bpc"] = val = evaluate("val")
+            rec[task.metric] = val = evaluate("val")
+            if task.unit == 1.0:
+                rec["val_ppl"] = math.exp(val)
+            rec["tokens"] = it * a.batch * a.T
             better = val < best["val"]
         else:
             rec["val_seq"] = evaluate("val")
@@ -205,7 +277,8 @@ def train(model_name, build, a, amp=None):
     if "sd" in best:
         model.load_state_dict(best["sd"])
         res["test"] = evaluate("test")
-        torch.save({**res, "state_dict": best["sd"]}, out / "ckpt.pt")
+        if a.save:
+            torch.save({**res, "state_dict": best["sd"]}, out / "ckpt.pt")
     (out / "result.json").write_text(json.dumps({**res, "log": log}))
     if wb is not None:
         obj = (-best["val"] if math.isfinite(best["val"]) else -99.0) if lm else best["val"]
@@ -253,6 +326,8 @@ def main(model_name, build, add_args, amp=None):
     a.steps = a.steps or DEFAULT_STEPS.get(a.task, 40_000)
     a.batch = a.batch or (64 if lm else 256)
     a.eval_every = a.eval_every or (2_000 if lm else 4_000)
+    if a.amp:
+        amp = {"bf16": torch.bfloat16, "fp32": None}[a.amp]
     if a.seeds:
         trial(a, sys.argv[1:])
     else:

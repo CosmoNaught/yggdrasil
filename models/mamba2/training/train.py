@@ -20,7 +20,7 @@ def add_args(ap):
 
 
 class Mamba2LM(nn.Module):
-    def __init__(self, vocab, classes, d, layers, state, head_dim, dt_max=0.1):
+    def __init__(self, vocab, classes, d, layers, state, head_dim, dt_max=0.1, tie=False):
         super().__init__()
         from mamba_ssm.models.config_mamba import MambaConfig
         from mamba_ssm.models.mixer_seq_simple import MambaLMHeadModel
@@ -29,15 +29,20 @@ class Mamba2LM(nn.Module):
                           ssm_cfg={"layer": "Mamba2", "d_state": state, "headdim": head_dim, "expand": 2,
                                    "d_conv": 4, "dt_max": dt_max},
                           rms_norm=True, residual_in_fp32=True, fused_add_norm=True, pad_vocab_size_multiple=8,
-                          tie_embeddings=False)
+                          tie_embeddings=tie)
         self.model = MambaLMHeadModel(cfg)
 
     def forward(self, tokens):
         return self.model(tokens).logits[..., :self.classes]  # drop vocab padding
 
+    def hidden(self, tokens):
+        """(final hidden states, head weight) for a fused cross-entropy (trainer --fused_ce)."""
+        return self.model.backbone(tokens), self.model.lm_head.weight[:self.classes]
+
 
 def build(cfg, vocab, classes):
-    return Mamba2LM(vocab, classes, cfg.d, cfg.layers, cfg.state, cfg.head_dim, getattr(cfg, "dt_max", 0.1))
+    return Mamba2LM(vocab, classes, cfg.d, cfg.layers, cfg.state, cfg.head_dim, getattr(cfg, "dt_max", 0.1),
+                    getattr(cfg, "tie", False))
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ CPU kernel.
 
 - **1.555 bpc on enwik8** vs 1.719 for the best baseline at the same active parameters
 - **1.567 bits/base on hg38** vs 1.637 for the best baseline, ahead of HyenaDNA
-- **1.2 µs per base** on one CPU core, **11×** faster than GRU and **138×** faster than a Transformer
+- **5.7 µs per base** on one CPU core, **3.9×** faster than GRU and **70×** faster than a Transformer
 - **176× to 3,326×** faster than dense models with the same stored parameters (5M to 800M)
 - **1.000 on all five state-tracking tasks**, including S5, where every other parallel model scores 0.000
 
@@ -23,8 +23,8 @@ Largest size, best of 3 seeds, single-core CPU inference.
 | Model | enwik8 bpc | CPU µs / token | hg38 bits / base | CPU µs / base |
 |---|---|---|---|---|
 | **Yggdrasil** | **1.555** | **6.7** | **1.567** | **5.7** |
-| GRU | 1.885 | 27.8 | 1.640 | 26.4 |
-| LSTM | 1.869 | 30.8 | 1.637 | 27.9 |
+| GRU | 1.885 | 23.6 | 1.640 | 22.3 |
+| LSTM | 1.869 | 27.4 | 1.637 | 26.0 |
 | Mamba-2 | 1.888 | 42.8 | 1.685 | 41.4 |
 | Transformer | 1.792 | 178.6 | 1.690 | 400.1 |
 | Gated DeltaNet | 1.727 | – | 1.653 | – |

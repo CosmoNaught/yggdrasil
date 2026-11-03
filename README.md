@@ -8,8 +8,8 @@ CPU kernel.
 
 - **1.555 bpc on enwik8** vs 1.719 for the best baseline at the same active parameters
 - **1.567 bits/base on hg38** vs 1.637 for the best baseline, ahead of HyenaDNA
-- **1.1 µs per base** on one CPU core, **15×** faster than GRU and **152×** faster than a Transformer
-- **178× to 3,782×** faster than dense models with the same stored parameters (5M to 800M)
+- **1.2 µs per base** on one CPU core, **11×** faster than GRU and **138×** faster than a Transformer
+- **176× to 3,326×** faster than dense models with the same stored parameters (5M to 800M)
 - **1.000 on all five state-tracking tasks**, including S5, where every other parallel model scores 0.000
 
 <p align="center"><img src="assets/architecture.png" width="520"></p>
@@ -22,7 +22,7 @@ Largest size, best of 3 seeds, single-core CPU inference.
 
 | Model | enwik8 bpc | CPU µs / token | hg38 bits / base | CPU µs / base |
 |---|---|---|---|---|
-| **Yggdrasil** | **1.555** | **6.7** | **1.567** | **5.5** |
+| **Yggdrasil** | **1.555** | **6.7** | **1.567** | **5.7** |
 | GRU | 1.885 | 27.8 | 1.640 | 26.4 |
 | LSTM | 1.869 | 30.8 | 1.637 | 27.9 |
 | Mamba-2 | 1.888 | 42.8 | 1.685 | 41.4 |
@@ -52,7 +52,8 @@ State tracking, sequence accuracy at the test length.
 
 ## Train
 
-    .venvs/jax/bin/python models/yggdrasil/training/train.py train --task enwik8 --n 256 --depth 10 --layers 5 --steps 80000
+    .venvs/jax/bin/python models/yggdrasil/training/train.py train --task enwik8 --n 256 --depth 10 --layers 5 \
+        --rank 64 --out_rank 32 --lower_rank 64 --batch 64 --T 256 --beam 8 --lr 5.5e-4 --steps 80000 --remat true
     .venvs/jax/bin/python models/yggdrasil/training/train.py train --task s5_word
     python shared/train.py --model gru --task enwik8         # any baseline: gru lstm mamba2 transformer
                                                              # gated_deltanet deltaproduct pdssm hyenadna

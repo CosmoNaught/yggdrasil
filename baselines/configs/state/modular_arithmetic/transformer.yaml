@@ -1,0 +1,11 @@
+# modular_arithmetic: test final-answer accuracy 0.225, seed 161 (best by validation of seeds 160, 161, 162)
+# search: shared search space, 10k-step trials; W&B sweep cosmosantoni-/yggdrasil-state-std/u5ep3jj3, best trial zloirkac; final run rzoyhgfv
+model: transformer
+task: modular_arithmetic
+seed: 161
+d_model: 128
+n_layers: 4
+head_dim: 32
+lr: 0.002355498363566702
+beta2: 0.999
+weight_decay: 0.1

@@ -1,0 +1,12 @@
+# enwik8, large (330k active parameters): test 1.896 bits per byte, seed 2 (best by validation of seeds 0, 1, 2)
+# search: W&B sweep cosmosantoni-/yggdrasil-enwik8/95pv20no, best trial vn74ucj2; final run 8ta95d9q
+model: mamba2
+task: enwik8
+seed: 2
+d_model: 128
+n_layers: 2
+d_state: 128
+head_dim: 32
+lr: 0.01989887027082178
+beta2: 0.99
+weight_decay: 0.0

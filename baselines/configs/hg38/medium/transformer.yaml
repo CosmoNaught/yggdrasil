@@ -1,0 +1,11 @@
+# hg38, medium (90k active parameters): test 1.728 bits per base, seed 2 (best by validation of seeds 0, 1, 2)
+# search: W&B sweep cosmosantoni-/yggdrasil-dna/118pgtfa, best trial lar49km6; final run 0zmqab2b
+model: transformer
+task: hg38
+seed: 2
+d_model: 60
+n_layers: 2
+head_dim: 30
+lr: 0.007449645639728301
+beta2: 0.95
+weight_decay: 0.1

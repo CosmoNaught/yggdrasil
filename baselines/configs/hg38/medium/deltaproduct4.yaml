@@ -1,0 +1,13 @@
+# hg38, medium (90k active parameters): test 1.720 bits per base, seed 2 (best by validation of seeds 0, 1, 2)
+# search: W&B sweep cosmosantoni-/yggdrasil-dna/u09099dq, best trial x2v7ra31; final run wbxrhoao
+model: deltaproduct4
+task: hg38
+seed: 2
+d_model: 56
+n_layers: 1
+head_dim: 16
+n_heads: 4
+d_ff: 160
+lr: 0.015337341718515671
+beta2: 0.999
+weight_decay: 0.1

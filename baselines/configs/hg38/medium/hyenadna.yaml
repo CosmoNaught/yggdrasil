@@ -1,0 +1,10 @@
+# hg38, medium (90k active parameters): test 1.694 bits per base, seed 1 (best by validation of seeds 0, 1, 2)
+# search: W&B sweep cosmosantoni-/yggdrasil-dna/dfmwtqx1, best trial o49sbgcw; final run dh6u16cq
+model: hyenadna
+task: hg38
+seed: 1
+d_model: 52
+n_layers: 2
+lr: 0.0026410662907977596
+beta2: 0.95
+weight_decay: 0.1

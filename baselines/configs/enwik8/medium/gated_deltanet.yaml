@@ -1,0 +1,13 @@
+# enwik8, medium (105k active parameters): test 2.111 bits per byte, seed 1 (best by validation of seeds 0, 1, 2)
+# search: W&B sweep cosmosantoni-/yggdrasil-enwik8/pjjgvsgk, best trial kod7dw81; final run 6hzir83y
+model: gated_deltanet
+task: enwik8
+seed: 1
+d_model: 72
+n_layers: 1
+head_dim: 32
+n_heads: 2
+d_ff: 192
+lr: 0.010702960149675696
+beta2: 0.95
+weight_decay: 0.1

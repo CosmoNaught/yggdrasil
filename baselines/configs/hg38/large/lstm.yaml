@@ -1,0 +1,10 @@
+# hg38, large (290k active parameters): test 1.637 bits per base, seed 2 (best by validation of seeds 0, 1, 2)
+# search: W&B sweep cosmosantoni-/yggdrasil-dna/vrvjpbbq, best trial azc6a2c6; final run 4m8u39be
+model: lstm
+task: hg38
+seed: 2
+d_model: 136
+n_layers: 2
+lr: 0.017393955422330184
+beta2: 0.95
+weight_decay: 0.1

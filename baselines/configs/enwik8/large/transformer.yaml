@@ -1,0 +1,11 @@
+# enwik8, large (330k active parameters): test 1.796 bits per byte, seed 2 (best by validation of seeds 0, 1, 2)
+# search: W&B sweep cosmosantoni-/yggdrasil-enwik8/t0htpoei, best trial i345d3we; final run rta66mhg
+model: transformer
+task: enwik8
+seed: 2
+d_model: 112
+n_layers: 2
+head_dim: 28
+lr: 0.016600807866696914
+beta2: 0.99
+weight_decay: 0.01

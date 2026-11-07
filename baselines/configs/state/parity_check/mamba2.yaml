@@ -1,0 +1,12 @@
+# parity_check: test final-answer accuracy 0.569, seed 161 (best by validation of seeds 160, 161, 162)
+# search: shared search space, 10k-step trials; W&B sweep cosmosantoni-/yggdrasil-state-std/ul486ax3, best trial 6q2bf3ht; final run ucvqzrlv
+model: mamba2
+task: parity_check
+seed: 161
+d_model: 64
+n_layers: 4
+d_state: 16
+head_dim: 16
+lr: 0.001663630906630887
+beta2: 0.99
+weight_decay: 0.0

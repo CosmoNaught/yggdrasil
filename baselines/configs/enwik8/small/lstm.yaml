@@ -1,0 +1,10 @@
+# enwik8, small (35k active parameters): test 2.353 bits per byte, seed 1 (best by validation of seeds 0, 1, 2)
+# search: W&B sweep cosmosantoni-/yggdrasil-enwik8/vtylv4t1, best trial mjmx5pt5; final run xtzyrxda
+model: lstm
+task: enwik8
+seed: 1
+d_model: 40
+n_layers: 2
+lr: 0.017578651988194735
+beta2: 0.999
+weight_decay: 0.01

@@ -1,0 +1,10 @@
+# hg38, large (290k active parameters): test 1.640 bits per base, seed 2 (best by validation of seeds 0, 1, 2)
+# search: W&B sweep cosmosantoni-/yggdrasil-dna/bvrsp8iq, best trial t25jytov; final run b9m63qjt
+model: gru
+task: hg38
+seed: 2
+d_model: 152
+n_layers: 2
+lr: 0.007084809671422317
+beta2: 0.95
+weight_decay: 0.1

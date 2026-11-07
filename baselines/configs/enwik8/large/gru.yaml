@@ -1,0 +1,10 @@
+# enwik8, large (330k active parameters): test 1.885 bits per byte, seed 1 (best by validation of seeds 0, 1, 2)
+# search: W&B sweep cosmosantoni-/yggdrasil-enwik8/q6g4b915, best trial lenazuys; final run a6m9z4ll
+model: gru
+task: enwik8
+seed: 1
+d_model: 152
+n_layers: 2
+lr: 0.005211547861132692
+beta2: 0.999
+weight_decay: 0.01

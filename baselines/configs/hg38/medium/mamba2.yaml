@@ -1,0 +1,12 @@
+# hg38, medium (90k active parameters): test 1.713 bits per base, seed 2 (best by validation of seeds 0, 1, 2)
+# search: W&B sweep cosmosantoni-/yggdrasil-dna/3od2bknl, best trial ymwegmlt; final run e1iz9b0e
+model: mamba2
+task: hg38
+seed: 2
+d_model: 64
+n_layers: 2
+d_state: 128
+head_dim: 16
+lr: 0.019744428084914608
+beta2: 0.99
+weight_decay: 0.01

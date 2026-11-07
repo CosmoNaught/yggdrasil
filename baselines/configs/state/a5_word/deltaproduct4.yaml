@@ -1,0 +1,11 @@
+# a5_word: test final-answer accuracy 1.000, seed 160 (best by validation of seeds 160, 161, 162)
+# search: shared search space, 10k-step trials; W&B sweep cosmosantoni-/yggdrasil-state-std/gq0qes93, best trial sc2l3mb6; final run mg9x3zkl
+model: deltaproduct4
+task: a5_word
+seed: 160
+d_model: 128
+n_layers: 4
+head_dim: 16
+lr: 0.0018317958722311829
+beta2: 0.99
+weight_decay: 0.0

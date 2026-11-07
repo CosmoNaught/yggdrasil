@@ -1,0 +1,11 @@
+# cycle_navigation: test final-answer accuracy 0.713, seed 160 (best by validation of seeds 160, 161, 162)
+# search: shared search space, 10k-step trials; W&B sweep cosmosantoni-/yggdrasil-state-std/lmgvz0d7, best trial xdrfknpr; final run wfne01ei
+model: deltaproduct2
+task: cycle_navigation
+seed: 160
+d_model: 128
+n_layers: 2
+head_dim: 32
+lr: 0.0006834690090679735
+beta2: 0.999
+weight_decay: 0.1

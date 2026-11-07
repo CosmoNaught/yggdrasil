@@ -1,0 +1,10 @@
+# parity_check: test final-answer accuracy 1.000, seed 160 (best by validation of seeds 160, 161, 162)
+# search: shared search space, 10k-step trials; W&B sweep cosmosantoni-/yggdrasil-state-std/ic2sweps, best trial ayfnj21m; final run 5o085pox
+model: lstm
+task: parity_check
+seed: 160
+d_model: 256
+n_layers: 2
+lr: 0.004334608011384483
+beta2: 0.99
+weight_decay: 0.1

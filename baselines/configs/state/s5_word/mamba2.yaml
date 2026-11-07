@@ -1,0 +1,12 @@
+# s5_word: test final-answer accuracy 0.010, seed 162 (best by validation of seeds 160, 161, 162)
+# search: shared search space, 10k-step trials; W&B sweep cosmosantoni-/yggdrasil-state-std/frbsuz94, best trial bahpqsfv; final run l9oc1qcu
+model: mamba2
+task: s5_word
+seed: 162
+d_model: 256
+n_layers: 2
+d_state: 16
+head_dim: 16
+lr: 0.0012852974973455453
+beta2: 0.99
+weight_decay: 0.1

@@ -1,0 +1,13 @@
+# hg38, medium (90k active parameters): test 1.737 bits per base, seed 2 (best by validation of seeds 0, 1, 2)
+# search: W&B sweep cosmosantoni-/yggdrasil-dna/9yvvfgph, best trial agcy8nrl; final run 9r5xoj7w
+model: gated_deltanet
+task: hg38
+seed: 2
+d_model: 80
+n_layers: 1
+head_dim: 32
+n_heads: 2
+d_ff: 224
+lr: 0.01348903004264282
+beta2: 0.999
+weight_decay: 0.01

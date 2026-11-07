@@ -1,0 +1,28 @@
+# A5 word problem, test accuracy 0.980
+# data
+task: a5_word
+# model
+n_layers: 3
+d_state: 256
+block_size: 16
+router_depth: 4
+router_token_dim: 16
+input_rank: 64
+readout_rank: 32
+layer_input_rank: 64
+expert_type: transition
+router_input: token_state
+# routing
+router_topk: 8
+router_noise: 0.0
+router_temperature: 0.5
+# optimisation
+seed: 162  # best validation seed; runs use 160, 161, 162
+steps: 100000
+batch: 256
+lr: 0.006738857862246742
+routed_lr_scale: 0.3
+warmup_frac: 0.1
+final_lr_frac: 0.01
+grad_clip: 1.0
+eval_every: 4000

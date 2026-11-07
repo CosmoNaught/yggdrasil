@@ -1,0 +1,31 @@
+# enwik8 medium (105k active parameters), test 1.559 bits per byte
+# data
+task: enwik8
+seq_len: 256
+val_windows: 512
+test_tokens: 5000000
+# model
+n_layers: 5
+d_state: 128
+block_size: 16
+router_depth: 10
+router_token_dim: 16
+input_rank: 32
+readout_rank: 16
+layer_input_rank: 32
+expert_type: transition
+router_input: token_state
+# routing
+router_topk: 8
+router_noise: 0.05
+router_temperature: 0.5
+# optimisation
+seed: 1  # best validation seed; runs use 0, 1, 2
+steps: 80000
+batch: 64
+lr: 0.008256344014486992
+routed_lr_scale: 0.3
+warmup_frac: 0.1
+final_lr_frac: 0.01
+grad_clip: 1.0
+eval_every: 5000

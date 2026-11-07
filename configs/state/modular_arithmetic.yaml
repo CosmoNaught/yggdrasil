@@ -1,0 +1,28 @@
+# modular arithmetic, test accuracy 0.981
+# data
+task: modular_arithmetic
+# model
+n_layers: 5
+d_state: 128
+block_size: 16
+router_depth: 4
+router_token_dim: 16
+input_rank: 32
+readout_rank: 16
+layer_input_rank: 32
+expert_type: transition
+router_input: token_state
+# routing
+router_topk: 8
+router_noise: 0.1
+router_temperature: 0.5
+# optimisation
+seed: 161  # best validation seed; runs use 160, 161, 162
+steps: 100000
+batch: 256
+lr: 0.0028440125932433264
+routed_lr_scale: 1.0
+warmup_frac: 0.1
+final_lr_frac: 0.01
+grad_clip: 1.0
+eval_every: 4000

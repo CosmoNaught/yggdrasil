@@ -1,0 +1,28 @@
+# parity, test accuracy 1.000
+# data
+task: parity_check
+# model
+n_layers: 3
+d_state: 64
+block_size: 16
+router_depth: 4
+router_token_dim: 16
+input_rank: 16
+readout_rank: 8
+layer_input_rank: 16
+expert_type: transition
+router_input: token_state
+# routing
+router_topk: 4
+router_noise: 0.1
+router_temperature: 0.5
+# optimisation
+seed: 160  # best validation seed; runs use 160, 161, 162
+steps: 100000
+batch: 256
+lr: 0.003285765463500747
+routed_lr_scale: 1.0
+warmup_frac: 0.1
+final_lr_frac: 0.01
+grad_clip: 1.0
+eval_every: 4000

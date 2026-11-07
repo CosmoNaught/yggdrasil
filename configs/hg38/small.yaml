@@ -1,0 +1,31 @@
+# hg38 small (27k active parameters), test 1.620 bits per base
+# data
+task: hg38
+seq_len: 1024
+val_windows: 512
+test_tokens: 253886464
+# model
+n_layers: 5
+d_state: 64
+block_size: 16
+router_depth: 10
+router_token_dim: 16
+input_rank: 16
+readout_rank: 8
+layer_input_rank: 16
+expert_type: transition
+router_input: token_state
+# routing
+router_topk: 8
+router_noise: 0.05
+router_temperature: 0.5
+# optimisation
+seed: 0  # best validation seed; runs use 0, 1, 2
+steps: 80000
+batch: 16
+lr: 0.0008620722278260995
+routed_lr_scale: 1.0
+warmup_frac: 0.1
+final_lr_frac: 0.01
+grad_clip: 1.0
+eval_every: 5000

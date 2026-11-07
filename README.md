@@ -96,11 +96,11 @@ a separate torch 2.8 environment.
 ## Checkpoints
 
 The 13 reported Yggdrasil models, each as `<id>.npz` (weights) and `<id>.json` (run record), with `SHA256SUMS`, at
-`<release URL>`.
+`https://github.com/CosmoNaught/yggdrasil/releases/download/v1.0.0`.
 
 ```sh
 export YGG_RUNS=results   # one id; list more inside the braces
-curl -fL --create-dirs -o "$YGG_RUNS/#1" "<release URL>/{enwik8_small.npz,enwik8_small.json,SHA256SUMS}"
+curl -fL --create-dirs -o "$YGG_RUNS/#1" "https://github.com/CosmoNaught/yggdrasil/releases/download/v1.0.0/{enwik8_small.npz,enwik8_small.json,SHA256SUMS}"
 ```
 
 | id | Size (MB) | Paper |

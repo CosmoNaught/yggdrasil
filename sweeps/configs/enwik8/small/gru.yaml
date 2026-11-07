@@ -1,0 +1,19 @@
+name: gru-enwik8
+description: small size; objective = -validation bits per token
+method: bayes
+metric: {name: objective, goal: maximize}
+run_cap: 8
+parameters:
+  model: {value: gru}
+  task: {value: enwik8}
+  steps: {value: 10000}
+  eval_every: {value: 2000}
+  test_tokens: {value: 500000}
+  seed: {value: 0}
+  d_model: {value: 44}
+  n_layers: {value: 2}
+  lr: {distribution: log_uniform_values, min: 0.0005, max: 0.02}
+  weight_decay:
+    values: [0.0, 0.01, 0.1]
+  beta2:
+    values: [0.95, 0.99, 0.999]

@@ -1,0 +1,22 @@
+name: deltaproduct4-a5_word
+description: objective = validation final-answer accuracy, scaled to 0 at chance and 1 at perfect
+method: bayes
+metric: {name: objective, goal: maximize}
+run_cap: 8
+parameters:
+  model: {value: deltaproduct4}
+  task: {value: a5_word}
+  steps: {value: 10000}
+  eval_every: {value: 2000}
+  seed: {value: 160}
+  lr: {distribution: log_uniform_values, min: 0.0005, max: 0.02}
+  weight_decay:
+    values: [0.0, 0.01, 0.1]
+  beta2:
+    values: [0.95, 0.99, 0.999]
+  n_layers:
+    values: [1, 2, 4]
+  d_model:
+    values: [64, 128, 256]
+  head_dim:
+    values: [16, 32]

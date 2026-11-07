@@ -1,0 +1,22 @@
+name: transformer-a5_word
+description: objective = validation final-answer accuracy, scaled to 0 at chance and 1 at perfect
+method: bayes
+metric: {name: objective, goal: maximize}
+run_cap: 8
+parameters:
+  model: {value: transformer}
+  task: {value: a5_word}
+  steps: {value: 40000}
+  eval_every: {value: 2000}
+  seed: {value: 160}
+  lr: {distribution: log_uniform_values, min: 0.0001, max: 0.02}
+  weight_decay:
+    values: [0.0, 1.0e-06, 0.01, 0.1]
+  beta2:
+    values: [0.95, 0.99, 0.999]
+  n_layers:
+    values: [1, 2, 3, 4]
+  layout:
+    values: [d64_h4_p16, d64_h2_p32, d64_h1_p64, d128_h8_p16, d128_h4_p32, d128_h2_p64, d128_h1_p128, d256_h16_p16, d256_h8_p32,
+      d256_h4_p64, d256_h2_p128, d384_h24_p16, d384_h12_p32, d384_h6_p64, d384_h3_p128, d512_h32_p16, d512_h16_p32, d512_h8_p64,
+      d512_h4_p128]

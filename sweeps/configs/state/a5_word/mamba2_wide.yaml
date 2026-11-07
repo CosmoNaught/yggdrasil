@@ -1,0 +1,23 @@
+name: mamba2-a5_word
+description: objective = validation final-answer accuracy, scaled to 0 at chance and 1 at perfect
+method: bayes
+metric: {name: objective, goal: maximize}
+run_cap: 8
+parameters:
+  model: {value: mamba2}
+  task: {value: a5_word}
+  steps: {value: 40000}
+  eval_every: {value: 2000}
+  seed: {value: 160}
+  lr: {distribution: log_uniform_values, min: 0.0001, max: 0.02}
+  weight_decay:
+    values: [0.0, 1.0e-06, 0.01, 0.1]
+  beta2:
+    values: [0.95, 0.99, 0.999]
+  n_layers:
+    values: [1, 2, 3, 4]
+  layout:
+    values: [d64_p16, d128_p16, d128_p32, d256_p16, d256_p32, d256_p64, d384_p16, d384_p32, d384_p64, d512_p16, d512_p32,
+      d512_p64]
+  d_state:
+    values: [16, 32, 64]

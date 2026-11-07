@@ -1,9 +1,0 @@
-# Python 3.12. The Transformer (env.py "flashattn"); flash-attn 2.8.3.post2 has official wheels up to torch 2.8.
---extra-index-url https://download.pytorch.org/whl/cu128
-torch==2.8.0+cu128
-transformers==4.57.6
-https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.3.post2/flash_attn-2.8.3.post2+cu12torch2.8cxx11abiTRUE-cp312-cp312-linux_x86_64.whl
-einops==0.8.2
-numpy==2.3.5
-pyyaml==6.0.3
-wandb==0.30.0

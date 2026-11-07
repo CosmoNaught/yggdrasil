@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "yggdrasil"
+version = "1.0.0"
+description = "Yggdrasil: a linear recurrence whose transition is a stored expert picked by a tree router"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE", "baselines/third_party/hyenadna/LICENSE"]
+authors = [{name = "Cosmo Santoni"}]
+requires-python = ">=3.12"
+dependencies = ["numpy>=2.5.4", "pyyaml>=6.0.3"]
+
+[project.optional-dependencies]
+# Tests.
+dev = ["pytest==8.4.2"]
+# W&B sweeps and run logging (yggdrasil.sweep, train --wandb true).
+sweep = ["wandb==0.30.0"]
+# Yggdrasil training and inference. On a GPU machine use jax[cuda12]==0.11.2.
+jax = ["jax==0.11.2", "optax==0.2.8", "scipy==1.18.1"]
+# GPU inference backend (the Triton step kernel); jax precomputes the expert tables at load.
+gpu = ["torch==2.10.0", "triton==3.6.0", "jax==0.11.2", "scipy==1.18.1"]
+# Baseline model code. torch comes from https://download.pytorch.org/whl/cu128, and mamba-ssm and causal-conv1d
+# compile against the installed torch, so install torch first and the rest with --no-build-isolation.
+baselines = [
+    "torch==2.10.0",
+    "mamba-ssm==2.3.0",
+    "causal-conv1d==1.6.0",
+    "flash-linear-attention==0.5.2",
+    "fla-core==0.5.2",
+    "transformers==4.57.6",
+    "einops==0.8.2",
+]
+# Exact Transformer reproduction with FlashAttention-2 (wheels need torch 2.8, so a separate environment);
+# without it the Transformer runs sdpa, the same model.
+flash = ["torch==2.8.0", "transformers==4.57.6", "einops==0.8.2", "flash-attn==2.8.3.post2"]
+
+[tool.setuptools.packages.find]
+include = ["yggdrasil*", "tasks*", "baselines*"]
+
+[tool.setuptools.package-data]
+baselines = ["configs/**/*.yaml", "third_party/hyenadna/LICENSE", "third_party/hyenadna/MODEL_CARD.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "cpu/tests"]
+
+[tool.ruff]
+line-length = 120

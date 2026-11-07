@@ -1,0 +1,12 @@
+{
+ "test": {
+  "scaled": 0.97650146484375,
+  "acc": 0.981201171875,
+  "chance": 0.2,
+  "n": 8192
+ },
+ "id": "modular_arithmetic",
+ "device": "cpu",
+ "jax": "0.11.2",
+ "seconds": 166.5
+}

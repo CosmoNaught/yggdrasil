@@ -1,0 +1,215 @@
+{
+ "state": {
+  "s5_word/160": {
+   "vocab": 120,
+   "classes": 120,
+   "val": "c5095bafc57afa9ab1e5e79501e1702b5a673aaa20daf4d2d281162e17c3c8c2",
+   "test": "ea490175e1700a0873b75b6c5f551bfaf90dfdaecf33b1ec37173b38d4e76649",
+   "train_batch": "472a26d1fac6d3dcf0924a407c80519ff98dde035063c5d8d973ed58f50c3c39",
+   "test_shape": [
+    8192,
+    256
+   ]
+  },
+  "s5_word/161": {
+   "vocab": 120,
+   "classes": 120,
+   "val": "96f5e16ddaad010c9f47a77f5462504ee8555cf869d55efa08bdaa0c09c82cd4",
+   "test": "f2a7a4e78f9638783863e21ba9e196d70524b0dde40999775028db39238d831f",
+   "train_batch": "02c70f1dd5f7558a9824c5b714e8cf7dc27285d7181c1134ca00cb7d5de7cb50",
+   "test_shape": [
+    8192,
+    256
+   ]
+  },
+  "s5_word/162": {
+   "vocab": 120,
+   "classes": 120,
+   "val": "e1d2e087adba2a4011e589e4e4d44c95f0528f0dfb2e2e1ab292e47fb2cb2475",
+   "test": "7ba8cf29aba96b238694acabd400ab02390af4d5539dbffc28b918baebd72e9f",
+   "train_batch": "6ed5dd2c54d1357ea9edf5e83fa59ea3be2091d014d63e7e3bcea906711e469f",
+   "test_shape": [
+    8192,
+    256
+   ]
+  },
+  "a5_word/160": {
+   "vocab": 60,
+   "classes": 60,
+   "val": "8d55d858f48ec5c18176983858b7c12625b0b0d3e7ef4b36952d3990e99ec03b",
+   "test": "1e1139fc4e248f5858098b7dc7e13c62e6f4a03281b85fc8cde8f3f553262d25",
+   "train_batch": "69cf12d863c0443aca26f5e6d2510f0ed9bcfbadd021ca8a7fdcfef6b71de949",
+   "test_shape": [
+    8192,
+    256
+   ]
+  },
+  "a5_word/161": {
+   "vocab": 60,
+   "classes": 60,
+   "val": "8da50222334a3bfca30ae4242019c8793daddf883210d1366504e8c6d6cfc3bf",
+   "test": "9a1d736169d81536f716ae0017cd86116cb061ddf73a1edf1e0dbada275ea478",
+   "train_batch": "180c5fa6d01e02aaf25eb9ec0936ed280e05df45193fb7cfe0e478d8c8d0166b",
+   "test_shape": [
+    8192,
+    256
+   ]
+  },
+  "a5_word/162": {
+   "vocab": 60,
+   "classes": 60,
+   "val": "7a945ffba0cf9f190ce19a2949b027c76072d87df578a5b719ec264d57f2721a",
+   "test": "ee52126e1286a5eca8d21b313f3b04ee43d1228957b2dc6f0a1dd65b26be1143",
+   "train_batch": "467d6edf50fd8f4ec6d31b2497b9ea2957f74bd8605643f2e56523b236e2271a",
+   "test_shape": [
+    8192,
+    256
+   ]
+  },
+  "parity_check/160": {
+   "vocab": 2,
+   "classes": 2,
+   "val": "0cfd1fe460513a480abf84a53ab0718a30d207495fd816daf3791d2eb10f8159",
+   "test": "1cda3d22f06d26a57c4c303cdddb9a90df1c30433677185719869b8839e0b02c",
+   "train_batch": "154c7f4a412abfb9bbe688796059a8b4ecb885e7d798bf65bff87bfc3b4f967a",
+   "test_shape": [
+    8192,
+    256
+   ]
+  },
+  "parity_check/161": {
+   "vocab": 2,
+   "classes": 2,
+   "val": "c91461f4f2b02512f1c0e15a5f2fc7c5bc82c401eb7688bc5a936dc55127752b",
+   "test": "c525b91b1b79c91c002f4136b937ad8fcd37a376b5b4edf45fadd9db897b5efb",
+   "train_batch": "9d2f5543d90dd2d1a1476c9ae752f813917b643650471770f04a44a8b136e15c",
+   "test_shape": [
+    8192,
+    256
+   ]
+  },
+  "parity_check/162": {
+   "vocab": 2,
+   "classes": 2,
+   "val": "6550df23c4f2c1458af53d42b069446950d9b8d44ad29a8407e4751aa62055e5",
+   "test": "0fabca80bfd709f1875fb784e356a66e41d90f3a7ed6aef6fde2913125e96d91",
+   "train_batch": "0d218a8433fccad21de80b3fda3b02cce0f14db34c71cc0f8e70f132050ac008",
+   "test_shape": [
+    8192,
+    256
+   ]
+  },
+  "cycle_navigation/160": {
+   "vocab": 3,
+   "classes": 5,
+   "val": "dcaa2d91bc21a7a57238969ceadc753ed8aedd7b24dc4032f48ed79d9031dd42",
+   "test": "c6bd435e9416a2c24b92034e6ab32b4a8576b4074840224bb7686d41bd4a8be2",
+   "train_batch": "a8a74112a96eadc52a6dd2766e6eaa2eb1a4d7d4b781eb673e07374b3f019d75",
+   "test_shape": [
+    8192,
+    256
+   ]
+  },
+  "cycle_navigation/161": {
+   "vocab": 3,
+   "classes": 5,
+   "val": "dd248ffca012d495bb07e416351695feaf66fde8553ffa1c665d5bb7cbae65d3",
+   "test": "2b7dedd0bb04abac9400455f10f97c5fb16a0e3358e308a1a6b21c46c567c442",
+   "train_batch": "63fbdd503e49dae833420fbdaea8eb30ad46e814ec83190b4da1db8912d27e61",
+   "test_shape": [
+    8192,
+    256
+   ]
+  },
+  "cycle_navigation/162": {
+   "vocab": 3,
+   "classes": 5,
+   "val": "2896a769400b3b5833a912c270d7443d533db123b5998082f938d428ce6ea684",
+   "test": "b144580dca63074463ad22391f8f744ad2f21a7e754f18abf3b39205cf962206",
+   "train_batch": "1e1ad2c9be132a2d0356dd99f302312720ddb99dca9659befb4025cee667e843",
+   "test_shape": [
+    8192,
+    256
+   ]
+  },
+  "modular_arithmetic/160": {
+   "vocab": 8,
+   "classes": 5,
+   "val": "d46fc1929d00653bc84a0a800b4d0c6b14dc42492f546717e26ed99379287f6b",
+   "test": "3d28c12c6cdde0feaef2ea71df44b8cb0b0b4dc0041391532f211c8a3f2f9ee4",
+   "train_batch": "6e42f22b5c4e30aa70a37d678d17418ab9a5ce5a76e45ea2c28ec74ad1986651",
+   "test_shape": [
+    8192,
+    256
+   ]
+  },
+  "modular_arithmetic/161": {
+   "vocab": 8,
+   "classes": 5,
+   "val": "3393e5c684a3aa6115337e55ef6c7d8200d318357e4df3b362215e2b627a5da0",
+   "test": "6dfe62ba5960c37f000430bd671411751acb35f66b044917b6db79c1d82f912c",
+   "train_batch": "4c023643a6b37c8e97a5cd9f01ff51d2a761f7fd08647794f4398d5a1986bf9a",
+   "test_shape": [
+    8192,
+    256
+   ]
+  },
+  "modular_arithmetic/162": {
+   "vocab": 8,
+   "classes": 5,
+   "val": "9a6821e5f8988cba4988419879c1bfb6d266732d23c6d6552c0740c8d87afb81",
+   "test": "628efd68c3deebc75f789f5748e052a86fc17b774a75e5813ade1e109f2a8d42",
+   "train_batch": "3a1e1ec4616c549d9e2eebb44479f53f7c7015cfcf296827211c56a10889441d",
+   "test_shape": [
+    8192,
+    256
+   ]
+  }
+ },
+ "lm": {
+  "enwik8/0": {
+   "vocab": 256,
+   "seq_len": 256,
+   "batch": 64,
+   "train_batch": "11258c214acfa6393f0039027ed9b674975c6e0a1113ddebeec5efcb0cbf33ac",
+   "val": "92bd44261ae66d58d21991476bb88748490d3c6f5af2a5e7cbdd8386d80382ce",
+   "test": "454258c826d0c203bb015fd455042deb8066712431199c74c33f01ad9b4d4d9a",
+   "test_shape": [
+    19531,
+    256
+   ],
+   "val_shape": [
+    512,
+    256
+   ]
+  },
+  "enwik8/1": {
+   "vocab": 256,
+   "seq_len": 256,
+   "batch": 64,
+   "train_batch": "44580402af11bcb51e6297798db2e29f8aa1d60c86fad3e5f8a933561e0d5285"
+  },
+  "hg38/0": {
+   "vocab": 5,
+   "seq_len": 1024,
+   "batch": 16,
+   "train_batch": "01b08ade7710af5ed27536a047ed63fab60dcf05ec25d3e39cf18e85d1b98831",
+   "val": "90fde381afd7a42947f1cfa79b2c6f041078084cbe6c3df7a0a3b060c295ad47",
+   "test": "a95a885d661722c746985655e0076c88863632153ba07b6261ed32c629f04a62",
+   "test_shape": [
+    247935,
+    1024
+   ],
+   "val_shape": [
+    512,
+    1024
+   ]
+  },
+  "hg38/1": {
+   "vocab": 5,
+   "seq_len": 1024,
+   "batch": 16,
+   "train_batch": "c9234fc3fb045040748d18382fa52fc3be03b03ab7237d48b3ccb2b3c94238e7"
+  }
+ }
+}

@@ -1,0 +1,8 @@
+{
+ "test": 1.8028174155923,
+ "tokens": 4999936,
+ "id": "ablation_store_outputs",
+ "device": "NVIDIA RTX A5000",
+ "jax": "0.11.2",
+ "seconds": 26.8
+}

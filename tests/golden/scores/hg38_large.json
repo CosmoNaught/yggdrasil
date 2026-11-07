@@ -1,0 +1,8 @@
+{
+ "test": 1.5666066803528478,
+ "tokens": 253885440,
+ "id": "hg38_large",
+ "device": "NVIDIA RTX A5000",
+ "jax": "0.11.2",
+ "seconds": 531.4
+}

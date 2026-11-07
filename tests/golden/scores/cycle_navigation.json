@@ -1,0 +1,12 @@
+{
+ "test": {
+  "scaled": 1.0,
+  "acc": 1.0,
+  "chance": 0.2,
+  "n": 8192
+ },
+ "id": "cycle_navigation",
+ "device": "cpu",
+ "jax": "0.11.2",
+ "seconds": 85.7
+}

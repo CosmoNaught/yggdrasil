@@ -1,0 +1,12 @@
+{
+ "test": {
+  "scaled": 0.999755859375,
+  "acc": 0.9998779296875,
+  "chance": 0.5,
+  "n": 8192
+ },
+ "id": "parity_check",
+ "device": "cpu",
+ "jax": "0.11.2",
+ "seconds": 45.4
+}

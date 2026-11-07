@@ -1,0 +1,730 @@
+{
+ "enwik8_small": {
+  "seed": 1,
+  "kind": "lm",
+  "config": {
+   "task": "enwik8",
+   "n_layers": 5,
+   "d_state": 64,
+   "block_size": 16,
+   "router_depth": 10,
+   "router_token_dim": 16,
+   "input_rank": 16,
+   "readout_rank": 8,
+   "layer_input_rank": 16,
+   "router_topk": 8,
+   "router_noise": 0.05,
+   "lr": 0.004194438870682253,
+   "routed_lr_scale": 1.0,
+   "batch": 64,
+   "seq_len": 256,
+   "steps": 80000,
+   "seed": 1,
+   "test_tokens": 5000000,
+   "val_windows": 512,
+   "expert_type": "transition",
+   "router_input": "token_state"
+  },
+  "metric": "bits per token, full test split",
+  "stored_params": 16275388,
+  "json_n_params": 16275388,
+  "paper_stored": 16300000.0,
+  "json_test": 1.6670969376906393,
+  "paper": 1.667,
+  "paper_match": true,
+  "seeds": {
+   "0": {
+    "best_val": 1.5638076958771594,
+    "test": 1.6632474370280812,
+    "best_step": 80000
+   },
+   "1": {
+    "best_val": 1.5608426934784532,
+    "test": 1.6670969376906393,
+    "best_step": 80000
+   },
+   "2": {
+    "best_val": 1.5627821740789802,
+    "test": 1.6712976627299285,
+    "best_step": 80000
+   }
+  },
+  "mean": 1.667214012482883,
+  "se": 0.0023246371288801896,
+  "paper_mean": null,
+  "paper_se": 0.002,
+  "paper_mean_match": true
+ },
+ "enwik8_medium": {
+  "seed": 1,
+  "kind": "lm",
+  "config": {
+   "task": "enwik8",
+   "n_layers": 5,
+   "d_state": 128,
+   "block_size": 16,
+   "router_depth": 10,
+   "router_token_dim": 16,
+   "input_rank": 32,
+   "readout_rank": 16,
+   "layer_input_rank": 32,
+   "router_topk": 8,
+   "router_noise": 0.05,
+   "lr": 0.008256344014486992,
+   "routed_lr_scale": 0.3,
+   "batch": 64,
+   "seq_len": 256,
+   "steps": 80000,
+   "seed": 1,
+   "test_tokens": 5000000,
+   "val_windows": 512,
+   "expert_type": "transition",
+   "router_input": "token_state"
+  },
+  "metric": "bits per token, full test split",
+  "stored_params": 54230716,
+  "json_n_params": 54230716,
+  "paper_stored": 54200000.0,
+  "json_test": 1.559117770232575,
+  "paper": 1.559,
+  "paper_match": true,
+  "seeds": {
+   "0": {
+    "best_val": 1.4619037401681678,
+    "test": 1.5703146278504558,
+    "best_step": 80000
+   },
+   "1": {
+    "best_val": 1.455257255647261,
+    "test": 1.559117770232575,
+    "best_step": 80000
+   },
+   "2": {
+    "best_val": 1.4574023952514727,
+    "test": 1.5663271332611282,
+    "best_step": 80000
+   }
+  },
+  "mean": 1.5652531771147196,
+  "se": 0.003276555176913754,
+  "paper_mean": 1.565,
+  "paper_se": 0.003,
+  "paper_mean_match": true
+ },
+ "enwik8_large": {
+  "seed": 1,
+  "kind": "lm",
+  "config": {
+   "task": "enwik8",
+   "n_layers": 5,
+   "d_state": 256,
+   "block_size": 16,
+   "router_depth": 10,
+   "router_token_dim": 16,
+   "input_rank": 64,
+   "readout_rank": 32,
+   "layer_input_rank": 64,
+   "router_topk": 8,
+   "router_noise": 0.1,
+   "lr": 0.0005495537070306931,
+   "routed_lr_scale": 1.0,
+   "batch": 64,
+   "seq_len": 256,
+   "steps": 80000,
+   "seed": 1,
+   "test_tokens": 5000000,
+   "val_windows": 512,
+   "expert_type": "transition",
+   "router_input": "token_state"
+  },
+  "metric": "bits per token, full test split",
+  "stored_params": 195439804,
+  "json_n_params": null,
+  "paper_stored": 195400000.0,
+  "json_test": 1.5594396949858915,
+  "paper": 1.559,
+  "paper_match": true,
+  "seeds": {
+   "0": {
+    "best_val": 1.4161848611630412,
+    "test": 1.5551947435217595,
+    "best_step": 80000
+   },
+   "1": {
+    "best_val": 1.415673159032146,
+    "test": 1.5594396949858915,
+    "best_step": 80000
+   },
+   "2": {
+    "best_val": 1.4199542049220015,
+    "test": 1.5616589608033054,
+    "best_step": 80000
+   }
+  },
+  "mean": 1.5587644664369853,
+  "se": 0.001896354086196501,
+  "paper_mean": null,
+  "paper_se": 0.002,
+  "paper_mean_match": true
+ },
+ "hg38_small": {
+  "seed": 0,
+  "kind": "lm",
+  "config": {
+   "task": "hg38",
+   "n_layers": 5,
+   "d_state": 64,
+   "block_size": 16,
+   "router_depth": 10,
+   "router_token_dim": 16,
+   "input_rank": 16,
+   "readout_rank": 8,
+   "layer_input_rank": 16,
+   "router_topk": 8,
+   "router_noise": 0.05,
+   "lr": 0.0008620722278260995,
+   "routed_lr_scale": 1.0,
+   "batch": 16,
+   "seq_len": 1024,
+   "steps": 80000,
+   "seed": 0,
+   "test_tokens": 253886464,
+   "val_windows": 512,
+   "expert_type": "transition",
+   "router_input": "token_state"
+  },
+  "metric": "bits per token, full test split",
+  "stored_params": 15554265,
+  "json_n_params": 15554265,
+  "paper_stored": 15600000.0,
+  "json_test": 1.6197337914078118,
+  "paper": 1.62,
+  "paper_match": true,
+  "seeds": {
+   "0": {
+    "best_val": 1.6307304233963185,
+    "test": 1.6197337914078118,
+    "best_step": 80000
+   },
+   "1": {
+    "best_val": 1.6345379473037702,
+    "test": 1.6223230152209218,
+    "best_step": 80000
+   },
+   "2": {
+    "best_val": 1.6372471470071492,
+    "test": 1.6241134628565344,
+    "best_step": 80000
+   }
+  },
+  "mean": 1.6220567564950894,
+  "se": 0.0012712920961893178,
+  "paper_mean": null,
+  "paper_se": 0.001,
+  "paper_mean_match": true
+ },
+ "hg38_medium": {
+  "seed": 0,
+  "kind": "lm",
+  "config": {
+   "task": "hg38",
+   "n_layers": 5,
+   "d_state": 128,
+   "block_size": 16,
+   "router_depth": 10,
+   "router_token_dim": 16,
+   "input_rank": 32,
+   "readout_rank": 16,
+   "layer_input_rank": 32,
+   "router_topk": 8,
+   "router_noise": 0.05,
+   "lr": 0.0007485080102483152,
+   "routed_lr_scale": 1.0,
+   "batch": 16,
+   "seq_len": 1024,
+   "steps": 80000,
+   "seed": 0,
+   "test_tokens": 253886464,
+   "val_windows": 512,
+   "expert_type": "transition",
+   "router_input": "token_state"
+  },
+  "metric": "bits per token, full test split",
+  "stored_params": 52033713,
+  "json_n_params": 52033713,
+  "paper_stored": 52000000.0,
+  "json_test": 1.5895968976322892,
+  "paper": 1.59,
+  "paper_match": true,
+  "seeds": {
+   "0": {
+    "best_val": 1.584501099883431,
+    "test": 1.5895968976322892,
+    "best_step": 80000
+   },
+   "1": {
+    "best_val": 1.5890262643972706,
+    "test": 1.5933404058194163,
+    "best_step": 80000
+   },
+   "2": {
+    "best_val": 1.5880815851939125,
+    "test": 1.5924448281904948,
+    "best_step": 80000
+   }
+  },
+  "mean": 1.5917940438807332,
+  "se": 0.001128583706856462,
+  "paper_mean": null,
+  "paper_se": 0.001,
+  "paper_mean_match": true
+ },
+ "hg38_large": {
+  "seed": 0,
+  "kind": "lm",
+  "config": {
+   "task": "hg38",
+   "n_layers": 5,
+   "d_state": 256,
+   "block_size": 16,
+   "router_depth": 10,
+   "router_token_dim": 16,
+   "input_rank": 64,
+   "readout_rank": 32,
+   "layer_input_rank": 64,
+   "router_topk": 8,
+   "router_noise": 0.1,
+   "lr": 0.0008389171879403299,
+   "routed_lr_scale": 0.3,
+   "batch": 16,
+   "seq_len": 1024,
+   "steps": 80000,
+   "seed": 0,
+   "test_tokens": 253886464,
+   "val_windows": 512,
+   "expert_type": "transition",
+   "router_input": "token_state"
+  },
+  "metric": "bits per token, full test split",
+  "stored_params": 187977825,
+  "json_n_params": 187977825,
+  "paper_stored": 188000000.0,
+  "json_test": 1.5666067502294052,
+  "paper": 1.567,
+  "paper_match": true,
+  "seeds": {
+   "0": {
+    "best_val": 1.55191088199505,
+    "test": 1.5666067502294052,
+    "best_step": 80000
+   },
+   "1": {
+    "best_val": 1.5552671341755535,
+    "test": 1.5689284443387534,
+    "best_step": 80000
+   },
+   "2": {
+    "best_val": 1.5535859392698754,
+    "test": 1.56766510041597,
+    "best_step": 80000
+   }
+  },
+  "mean": 1.5677334316613762,
+  "se": 0.000671085626347251,
+  "paper_mean": null,
+  "paper_se": 0.001,
+  "paper_mean_match": true
+ },
+ "s5_word": {
+  "seed": 160,
+  "kind": "state",
+  "config": {
+   "task": "s5_word",
+   "n_layers": 5,
+   "d_state": 128,
+   "block_size": 16,
+   "router_depth": 4,
+   "router_token_dim": 16,
+   "input_rank": 32,
+   "readout_rank": 16,
+   "layer_input_rank": 32,
+   "router_topk": 8,
+   "router_noise": 0.05,
+   "lr": 0.005426263239689804,
+   "routed_lr_scale": 0.3,
+   "batch": 256,
+   "seq_len": 256,
+   "steps": 100000,
+   "seed": 160,
+   "test_tokens": 5000000,
+   "val_windows": 512,
+   "expert_type": "transition",
+   "router_input": "token_state"
+  },
+  "metric": "final-answer accuracy, 8192 test sequences",
+  "stored_params": 1878260,
+  "json_n_params": 1878260,
+  "paper_stored": null,
+  "json_test": 1.0,
+  "paper": 1.0,
+  "paper_match": true,
+  "seeds": {
+   "160": {
+    "best_val": 1.0,
+    "test": 1.0,
+    "best_step": 88000
+   },
+   "161": {
+    "best_val": 0.9519925157563025,
+    "test": 0.9486083984375,
+    "best_step": 100000
+   },
+   "162": {
+    "best_val": 0.9490382090336135,
+    "test": 0.9486083984375,
+    "best_step": 72000
+   }
+  },
+  "mean": 0.9657389322916666,
+  "se": 0.017130533854166668,
+  "paper_mean": 0.966,
+  "paper_se": 0.017,
+  "paper_mean_match": true
+ },
+ "a5_word": {
+  "seed": 162,
+  "kind": "state",
+  "config": {
+   "task": "a5_word",
+   "n_layers": 3,
+   "d_state": 256,
+   "block_size": 16,
+   "router_depth": 4,
+   "router_token_dim": 16,
+   "input_rank": 64,
+   "readout_rank": 32,
+   "layer_input_rank": 64,
+   "router_topk": 8,
+   "router_noise": 0.0,
+   "lr": 0.006738857862246742,
+   "routed_lr_scale": 0.3,
+   "batch": 256,
+   "seq_len": 256,
+   "steps": 100000,
+   "seed": 162,
+   "test_tokens": 5000000,
+   "val_windows": 512,
+   "expert_type": "transition",
+   "router_input": "token_state"
+  },
+  "metric": "final-answer accuracy, 8192 test sequences",
+  "stored_params": 3269434,
+  "json_n_params": 3269434,
+  "paper_stored": null,
+  "json_test": 0.980224609375,
+  "paper": 0.98,
+  "paper_match": true,
+  "seeds": {
+   "160": {
+    "best_val": 0.9687168961864406,
+    "test": 0.976318359375,
+    "best_step": 100000
+   },
+   "161": {
+    "best_val": 0.9247715836864406,
+    "test": 0.923583984375,
+    "best_step": 100000
+   },
+   "162": {
+    "best_val": 0.9818756620762712,
+    "test": 0.980224609375,
+    "best_step": 100000
+   }
+  },
+  "mean": 0.9600423177083334,
+  "se": 0.01826401059779367,
+  "paper_mean": 0.96,
+  "paper_se": 0.018,
+  "paper_mean_match": true
+ },
+ "parity_check": {
+  "seed": 160,
+  "kind": "state",
+  "config": {
+   "task": "parity_check",
+   "n_layers": 3,
+   "d_state": 64,
+   "block_size": 16,
+   "router_depth": 4,
+   "router_token_dim": 16,
+   "input_rank": 16,
+   "readout_rank": 8,
+   "layer_input_rank": 16,
+   "router_topk": 4,
+   "router_noise": 0.1,
+   "lr": 0.003285765463500747,
+   "routed_lr_scale": 1.0,
+   "batch": 256,
+   "seq_len": 256,
+   "steps": 100000,
+   "seed": 160,
+   "test_tokens": 5000000,
+   "val_windows": 512,
+   "expert_type": "transition",
+   "router_input": "token_state"
+  },
+  "metric": "final-answer accuracy, 8192 test sequences",
+  "stored_params": 128848,
+  "json_n_params": 128848,
+  "paper_stored": null,
+  "json_test": 0.9998779296875,
+  "paper": 1.0,
+  "paper_match": true,
+  "seeds": {
+   "160": {
+    "best_val": 1.0,
+    "test": 0.9998779296875,
+    "best_step": 40000
+   },
+   "161": {
+    "best_val": 0.9951171875,
+    "test": 0.996826171875,
+    "best_step": 20000
+   },
+   "162": {
+    "best_val": 0.9970703125,
+    "test": 0.997802734375,
+    "best_step": 16000
+   }
+  },
+  "mean": 0.9981689453125,
+  "se": 0.0008997942866005852,
+  "paper_mean": 0.998,
+  "paper_se": 0.001,
+  "paper_mean_match": true
+ },
+ "cycle_navigation": {
+  "seed": 160,
+  "kind": "state",
+  "config": {
+   "task": "cycle_navigation",
+   "n_layers": 5,
+   "d_state": 64,
+   "block_size": 16,
+   "router_depth": 4,
+   "router_token_dim": 16,
+   "input_rank": 16,
+   "readout_rank": 8,
+   "layer_input_rank": 16,
+   "router_topk": 4,
+   "router_noise": 0.0,
+   "lr": 0.015634095039909063,
+   "routed_lr_scale": 1.0,
+   "batch": 256,
+   "seq_len": 256,
+   "steps": 100000,
+   "seed": 160,
+   "test_tokens": 5000000,
+   "val_windows": 512,
+   "expert_type": "transition",
+   "router_input": "token_state"
+  },
+  "metric": "final-answer accuracy, 8192 test sequences",
+  "stored_params": 255225,
+  "json_n_params": 255225,
+  "paper_stored": null,
+  "json_test": 1.0,
+  "paper": 1.0,
+  "paper_match": true,
+  "seeds": {
+   "160": {
+    "best_val": 1.0,
+    "test": 1.0,
+    "best_step": 8000
+   },
+   "161": {
+    "best_val": 1.0,
+    "test": 1.0,
+    "best_step": 16000
+   },
+   "162": {
+    "best_val": 1.0,
+    "test": 1.0,
+    "best_step": 20000
+   }
+  },
+  "mean": 1.0,
+  "se": 0.0,
+  "paper_mean": 1.0,
+  "paper_se": 0.0,
+  "paper_mean_match": true
+ },
+ "modular_arithmetic": {
+  "seed": 161,
+  "kind": "state",
+  "config": {
+   "task": "modular_arithmetic",
+   "n_layers": 5,
+   "d_state": 128,
+   "block_size": 16,
+   "router_depth": 4,
+   "router_token_dim": 16,
+   "input_rank": 32,
+   "readout_rank": 16,
+   "layer_input_rank": 32,
+   "router_topk": 8,
+   "router_noise": 0.1,
+   "lr": 0.0028440125932433264,
+   "routed_lr_scale": 1.0,
+   "batch": 256,
+   "seq_len": 256,
+   "steps": 100000,
+   "seed": 161,
+   "test_tokens": 5000000,
+   "val_windows": 512,
+   "expert_type": "transition",
+   "router_input": "token_state"
+  },
+  "metric": "final-answer accuracy, 8192 test sequences",
+  "stored_params": 897681,
+  "json_n_params": 897681,
+  "paper_stored": null,
+  "json_test": 0.981201171875,
+  "paper": 0.981,
+  "paper_match": true,
+  "seeds": {
+   "160": {
+    "best_val": 0.48669433593749994,
+    "test": 0.5831298828125,
+    "best_step": 84000
+   },
+   "161": {
+    "best_val": 0.9737548828125,
+    "test": 0.981201171875,
+    "best_step": 88000
+   },
+   "162": {
+    "best_val": 0.40155029296874994,
+    "test": 0.53173828125,
+    "best_step": 20000
+   }
+  },
+  "mean": 0.6986897786458334,
+  "se": 0.1420326132219913,
+  "paper_mean": 0.699,
+  "paper_se": 0.142,
+  "paper_mean_match": true
+ },
+ "ablation_store_outputs": {
+  "seed": 1,
+  "kind": "lm",
+  "config": {
+   "task": "enwik8",
+   "n_layers": 5,
+   "d_state": 128,
+   "block_size": 16,
+   "router_depth": 10,
+   "router_token_dim": 16,
+   "input_rank": 49,
+   "readout_rank": 16,
+   "layer_input_rank": 32,
+   "router_topk": 8,
+   "router_noise": 0.1,
+   "lr": 0.002093576772944113,
+   "routed_lr_scale": 1.0,
+   "batch": 64,
+   "seq_len": 256,
+   "steps": 80000,
+   "seed": 1,
+   "test_tokens": 5000000,
+   "val_windows": 512,
+   "expert_type": "output",
+   "router_input": "token_state"
+  },
+  "metric": "bits per token, full test split",
+  "stored_params": 54809532,
+  "json_n_params": 54809532,
+  "paper_stored": null,
+  "json_test": 1.80281741784654,
+  "paper": 1.803,
+  "paper_match": true,
+  "seeds": {
+   "0": {
+    "best_val": 1.6921537046845003,
+    "test": 1.8027282930924866,
+    "best_step": 80000
+   },
+   "1": {
+    "best_val": 1.6899430396903097,
+    "test": 1.80281741784654,
+    "best_step": 80000
+   },
+   "2": {
+    "best_val": 1.6952642688993305,
+    "test": 1.8034059731037542,
+    "best_step": 80000
+   }
+  },
+  "mean": 1.802983894680927,
+  "se": 0.00021260170249281482,
+  "paper_mean": 1.803,
+  "paper_se": 0.0,
+  "paper_mean_match": true
+ },
+ "ablation_token_routing": {
+  "seed": 1,
+  "kind": "lm",
+  "config": {
+   "task": "enwik8",
+   "n_layers": 5,
+   "d_state": 128,
+   "block_size": 16,
+   "router_depth": 10,
+   "router_token_dim": 16,
+   "input_rank": 32,
+   "readout_rank": 16,
+   "layer_input_rank": 32,
+   "router_topk": 4,
+   "router_noise": 0.05,
+   "lr": 0.0053077971305156455,
+   "routed_lr_scale": 0.3,
+   "batch": 64,
+   "seq_len": 256,
+   "steps": 80000,
+   "seed": 1,
+   "test_tokens": 5000000,
+   "val_windows": 512,
+   "expert_type": "transition",
+   "router_input": "token"
+  },
+  "metric": "bits per token, full test split",
+  "stored_params": 53706940,
+  "json_n_params": null,
+  "paper_stored": null,
+  "json_test": 1.7066644134392213,
+  "paper": 1.707,
+  "paper_match": true,
+  "seeds": {
+   "0": {
+    "best_val": 1.6146337286866452,
+    "test": 1.7098554854397692,
+    "best_step": 80000
+   },
+   "1": {
+    "best_val": 1.6113025752242522,
+    "test": 1.7066644134392213,
+    "best_step": 80000
+   },
+   "2": {
+    "best_val": 1.618210387383145,
+    "test": 1.7066163732632122,
+    "best_step": 80000
+   }
+  },
+  "mean": 1.7077120907140675,
+  "se": 0.0010717870866379915,
+  "paper_mean": 1.708,
+  "paper_se": 0.001,
+  "paper_mean_match": true
+ }
+}

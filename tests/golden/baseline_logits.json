@@ -1,0 +1,181 @@
+{
+ "gru/cpu": {
+  "task": "s5_word",
+  "fields": {
+   "d": 64,
+   "layers": 2
+  },
+  "seed": 0,
+  "vocab": 120,
+  "classes": 120,
+  "amp": "None",
+  "n_params": 65400,
+  "device": "cpu",
+  "torch": "2.10.0+cu128"
+ },
+ "lstm/cpu": {
+  "task": "s5_word",
+  "fields": {
+   "d": 64,
+   "layers": 2
+  },
+  "seed": 0,
+  "vocab": 120,
+  "classes": 120,
+  "amp": "None",
+  "n_params": 82040,
+  "device": "cpu",
+  "torch": "2.10.0+cu128"
+ },
+ "transformer/cpu": {
+  "task": "s5_word",
+  "fields": {
+   "d": 64,
+   "layers": 2,
+   "head_dim": 32,
+   "attn": "sdpa"
+  },
+  "seed": 0,
+  "vocab": 120,
+  "classes": 120,
+  "amp": "torch.bfloat16",
+  "n_params": 122176,
+  "device": "cpu",
+  "torch": "2.10.0+cu128"
+ },
+ "hyenadna/cpu": {
+  "task": "s5_word",
+  "fields": {
+   "d": 64,
+   "layers": 2
+  },
+  "seed": 0,
+  "vocab": 120,
+  "classes": 120,
+  "amp": "None",
+  "n_params": 142848,
+  "device": "cpu",
+  "torch": "2.10.0+cu128"
+ },
+ "gru/cuda": {
+  "task": "s5_word",
+  "fields": {
+   "d": 64,
+   "layers": 2
+  },
+  "seed": 0,
+  "vocab": 120,
+  "classes": 120,
+  "amp": "None",
+  "n_params": 65400,
+  "device": "NVIDIA RTX A5000",
+  "torch": "2.10.0+cu128"
+ },
+ "lstm/cuda": {
+  "task": "s5_word",
+  "fields": {
+   "d": 64,
+   "layers": 2
+  },
+  "seed": 0,
+  "vocab": 120,
+  "classes": 120,
+  "amp": "None",
+  "n_params": 82040,
+  "device": "NVIDIA RTX A5000",
+  "torch": "2.10.0+cu128"
+ },
+ "transformer/cuda": {
+  "task": "s5_word",
+  "fields": {
+   "d": 64,
+   "layers": 2,
+   "head_dim": 32,
+   "attn": "sdpa"
+  },
+  "seed": 0,
+  "vocab": 120,
+  "classes": 120,
+  "amp": "torch.bfloat16",
+  "n_params": 122176,
+  "device": "NVIDIA RTX A5000",
+  "torch": "2.10.0+cu128"
+ },
+ "hyenadna/cuda": {
+  "task": "s5_word",
+  "fields": {
+   "d": 64,
+   "layers": 2
+  },
+  "seed": 0,
+  "vocab": 120,
+  "classes": 120,
+  "amp": "None",
+  "n_params": 142848,
+  "device": "NVIDIA RTX A5000",
+  "torch": "2.10.0+cu128"
+ },
+ "mamba2/cuda": {
+  "task": "s5_word",
+  "fields": {
+   "d": 64,
+   "layers": 2,
+   "state": 16,
+   "head_dim": 16
+  },
+  "seed": 0,
+  "vocab": 120,
+  "classes": 120,
+  "amp": "None",
+  "n_params": 71728,
+  "device": "NVIDIA RTX A5000",
+  "torch": "2.10.0+cu128"
+ },
+ "gated_deltanet/cuda": {
+  "task": "s5_word",
+  "fields": {
+   "d": 64,
+   "layers": 2,
+   "head_dim": 32
+  },
+  "seed": 0,
+  "vocab": 120,
+  "classes": 120,
+  "amp": "None",
+  "n_params": 182216,
+  "device": "NVIDIA RTX A5000",
+  "torch": "2.10.0+cu128"
+ },
+ "deltaproduct2/cuda": {
+  "task": "s5_word",
+  "fields": {
+   "d": 64,
+   "layers": 2,
+   "head_dim": 32,
+   "householder": 2
+  },
+  "seed": 0,
+  "vocab": 120,
+  "classes": 120,
+  "amp": "torch.bfloat16",
+  "n_params": 208320,
+  "device": "NVIDIA RTX A5000",
+  "torch": "2.10.0+cu128"
+ },
+ "deltaproduct4/cuda": {
+  "task": "s5_word",
+  "fields": {
+   "d": 64,
+   "layers": 2,
+   "head_dim": 32,
+   "householder": 4
+  },
+  "seed": 0,
+  "vocab": 120,
+  "classes": 120,
+  "amp": "torch.bfloat16",
+  "n_params": 261056,
+  "device": "NVIDIA RTX A5000",
+  "torch": "2.10.0+cu128"
+ }
+}

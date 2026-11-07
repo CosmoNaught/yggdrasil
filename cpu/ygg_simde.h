@@ -6,8 +6,13 @@
 #include <stdint.h>
 static inline simde__m512i ygg_sra_epi32(simde__m512i a, simde__m128i c) {  // not in SIMDe
     int32_t t[16]; simde_mm512_storeu_si512(t, a); const int s = simde_mm_cvtsi128_si32(c);
-    for (int i = 0; i < 16; i++) t[i] >>= s;
+    for (int i = 0; i < 16; i++) t[i] >>= s;  // arithmetic on negative int32 with every supported compiler (C++20: always)
     return simde_mm512_loadu_si512(t);
 }
 #undef _mm512_sra_epi32
 #define _mm512_sra_epi32 ygg_sra_epi32
+static inline int ygg_mask_reduce_add_epi32(simde__mmask16 k, simde__m512i a) {  // not in SIMDe
+    return simde_mm512_reduce_add_epi32(simde_mm512_maskz_mov_epi32(k, a));
+}
+#undef _mm512_mask_reduce_add_epi32
+#define _mm512_mask_reduce_add_epi32 ygg_mask_reduce_add_epi32

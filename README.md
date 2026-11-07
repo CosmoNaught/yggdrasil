@@ -95,7 +95,7 @@ a separate torch 2.8 environment.
 
 ## Checkpoints
 
-The 13 reported Yggdrasil models, each as `<id>.npz` (weights) and `<id>.json` (run record), with `SHA256SUMS`, at
+The 11 reported Yggdrasil models, each as `<id>.npz` (weights) and `<id>.json` (run record), with `SHA256SUMS`, at
 `https://github.com/CosmoNaught/yggdrasil/releases/download/v1.0.0`.
 
 ```sh
@@ -116,8 +116,6 @@ curl -fL --create-dirs -o "$YGG_RUNS/#1" "https://github.com/CosmoNaught/yggdras
 | `parity_check` | 0.5 | State tracking, parity |
 | `cycle_navigation` | 1.0 | State tracking, cycle navigation |
 | `modular_arithmetic` | 3.6 | State tracking, modular arithmetic |
-| `ablation_store_outputs` | 219.3 | Ablation, experts store outputs only |
-| `ablation_token_routing` | 214.8 | Ablation, routers read the token only |
 
 ## Quick start
 

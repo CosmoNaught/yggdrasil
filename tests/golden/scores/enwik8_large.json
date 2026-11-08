@@ -1,8 +1,8 @@
 {
- "test": 1.5594396952676717,
+ "test": 1.5395202271460968,
  "tokens": 4999936,
  "id": "enwik8_large",
- "device": "NVIDIA RTX A5000",
+ "device": "NVIDIA A100-PCIE-40GB",
  "jax": "0.11.2",
- "seconds": 50.6
+ "seconds": 32.1
 }

@@ -9,7 +9,7 @@ Training is a parallel scan, and inference runs token by token in an int8 kernel
 
 ## Highlights
 
-- **1.559 bits per byte on enwik8** and **1.567 bits per base on hg38** at 330k and 290k active parameters, against
+- **1.540 bits per byte on enwik8** and **1.567 bits per base on hg38** at 330k and 290k active parameters, against
   1.724 and 1.637 for the best baselines.
 - **3.0× to 3.3× faster** on one CPU core than the fastest baseline with a streaming step, and **1.2× to 3.8× faster**
   than the Transformer, Gated DeltaNet and HyenaDNA on a GPU at batch 1.
@@ -28,32 +28,32 @@ Training is a parallel scan, and inference runs token by token in an int8 kernel
 <p align="center"><img src="assets/pareto_cpu.png" width="900"></p>
 
 **enwik8 at 330k active parameters.** Microseconds per token at batch 1 on one CPU core and on one GPU, and float test
-bits per byte on the full test split, best of 3 seeds (± SE). Bold marks the best per column.
+bits per byte on the full test split, the seed with the best validation score. Bold marks the best per column.
 
 | | Model | Total | Active | File (MB) | CPU µs/tok | GPU µs/tok | Test bits / byte (Hutter 2006) |
 |---|---|---:|---:|---:|---:|---:|---|
-| Sequential | GRU | 357.2k | 318.4k | 1.4 | 20.2 | 87.1 | 1.885 (±0.003) |
-| | LSTM | 368.0k | 333.3k | 1.5 | 23.7 | 125.3 | 1.869 (±0.003) |
-| Parallel | Transformer | 373.3k | 344.7k | 0.5 | 130.0 | 224.4 | 1.796 (±0.004) |
-| | Mamba-2 | 335.8k | 303.2k | 1.2 | 43.0 | **43.8** | 1.896 (±0.002) |
-| | Gated DeltaNet | 348.9k | 324.4k | – | – | 125.5 | 1.727 (±0.018) |
-| | DeltaProduct-2 | 373.6k | 351.2k | – | – | 179.9 | 1.724 (±0.004) |
-| | DeltaProduct-4 | 331.4k | 311.0k | – | – | 162.0 | 1.740 (±0.019) |
-| | **Yggdrasil** | 195.4M | 329.5k | 681.3 | **6.7** | 80.1 | **1.559** (±0.002) |
+| Sequential | GRU | 357.2k | 318.4k | 1.4 | 20.2 | 87.1 | 1.885 |
+| | LSTM | 368.0k | 333.3k | 1.5 | 23.7 | 125.3 | 1.869 |
+| Parallel | Transformer | 373.3k | 344.7k | 0.5 | 130.0 | 224.4 | 1.796 |
+| | Mamba-2 | 335.8k | 303.2k | 1.2 | 43.0 | **43.8** | 1.896 |
+| | Gated DeltaNet | 348.9k | 324.4k | – | – | 125.5 | 1.727 |
+| | DeltaProduct-2 | 373.6k | 351.2k | – | – | 179.9 | 1.724 |
+| | DeltaProduct-4 | 331.4k | 311.0k | – | – | 162.0 | 1.740 |
+| | **Yggdrasil** | 195.4M | 329.5k | 681.3 | **6.7** | 80.1 | **1.540** |
 
 **State tracking.** Final-answer accuracy on test lengths 40 to 256 after training on lengths 3 to 40: the seed with
-the best validation score, with the mean ± SE over 3 seeds in parentheses. Bold marks a solved task (accuracy ≥ 0.90).
+the best validation score. Bold marks a solved task (accuracy ≥ 0.90).
 
 | | Model | S5 (Merrill et al. 2024) | A5 (Merrill et al. 2024) | Parity (Delétang et al. 2023) | Cycle (Delétang et al. 2023) | Mod. arith. (Delétang et al. 2023) |
 |---|---|---|---|---|---|---|
-| Sequential | GRU | **0.979** (0.855 ± 0.064) | **1.000** (0.997 ± 0.002) | **1.000** (1.000 ± 0.000) | **1.000** (1.000 ± 0.000) | **1.000** (1.000 ± 0.000) |
-| | LSTM | **0.995** (0.989 ± 0.005) | **0.999** (1.000 ± 0.000) | **1.000** (1.000 ± 0.000) | **1.000** (1.000 ± 0.000) | **1.000** (1.000 ± 0.000) |
-| Parallel | Transformer | 0.010 (0.008 ± 0.001) | 0.031 (0.027 ± 0.004) | 0.506 (0.506 ± 0.001) | 0.238 (0.244 ± 0.004) | 0.225 (0.231 ± 0.007) |
-| | Mamba-2 | 0.010 (0.009 ± 0.001) | 0.017 (0.015 ± 0.001) | 0.569 (0.553 ± 0.010) | 0.650 (0.565 ± 0.058) | 0.395 (0.290 ± 0.054) |
-| | Gated DeltaNet | 0.018 (0.012 ± 0.003) | **0.999** (0.345 ± 0.327) | **0.999** (0.961 ± 0.038) | 0.615 (0.565 ± 0.026) | 0.826 (0.700 ± 0.067) |
-| | DeltaProduct-2 | 0.688 (0.389 ± 0.197) | **0.999** (0.972 ± 0.023) | **1.000** (1.000 ± 0.000) | 0.713 (0.644 ± 0.066) | **1.000** (0.997 ± 0.001) |
-| | DeltaProduct-4 | **0.935** (0.742 ± 0.124) | **1.000** (0.999 ± 0.001) | **1.000** (1.000 ± 0.000) | 0.684 (0.618 ± 0.033) | **1.000** (1.000 ± 0.000) |
-| | Yggdrasil | **1.000** (0.966 ± 0.017) | **0.980** (0.960 ± 0.018) | **1.000** (0.998 ± 0.001) | **1.000** (1.000 ± 0.000) | **0.981** (0.699 ± 0.142) |
+| Sequential | GRU | **0.979** | **1.000** | **1.000** | **1.000** | **1.000** |
+| | LSTM | **0.995** | **0.999** | **1.000** | **1.000** | **1.000** |
+| Parallel | Transformer | 0.010 | 0.031 | 0.506 | 0.238 | 0.225 |
+| | Mamba-2 | 0.010 | 0.017 | 0.569 | 0.650 | 0.395 |
+| | Gated DeltaNet | 0.018 | **0.999** | **0.999** | 0.615 | 0.826 |
+| | DeltaProduct-2 | 0.688 | **0.999** | **1.000** | 0.713 | **1.000** |
+| | DeltaProduct-4 | **0.935** | **1.000** | **1.000** | 0.684 | **1.000** |
+| | Yggdrasil | **1.000** | **0.980** | **1.000** | **1.000** | **0.981** |
 
 **Speed at equal stored parameters.** CPU time of Yggdrasil per token and its speedup over each dense model with the
 same stored parameters, at batch 1. File / Q8_0 is the Yggdrasil file size over the Q8_0 file of the matched

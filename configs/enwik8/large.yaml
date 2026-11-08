@@ -1,4 +1,4 @@
-# enwik8 large (330k active parameters), test 1.559 bits per byte
+# enwik8 large (330k active parameters), test 1.540 bits per byte
 # data
 task: enwik8
 seq_len: 256
@@ -20,10 +20,10 @@ router_topk: 8
 router_noise: 0.1
 router_temperature: 0.5
 # optimisation
-seed: 1  # best validation seed; runs use 0, 1, 2
+seed: 0  # best validation seed; runs use 0, 1, 2
 steps: 80000
 batch: 64
-lr: 0.0005495537070306931
+lr: 0.0008364422322615065
 routed_lr_scale: 1.0
 warmup_frac: 0.1
 final_lr_frac: 0.01

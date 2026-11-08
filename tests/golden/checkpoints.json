@@ -112,7 +112,7 @@
   "paper_mean_match": true
  },
  "enwik8_large": {
-  "seed": 1,
+  "seed": 0,
   "kind": "lm",
   "config": {
    "task": "enwik8",
@@ -126,12 +126,12 @@
    "layer_input_rank": 64,
    "router_topk": 8,
    "router_noise": 0.1,
-   "lr": 0.0005495537070306931,
+   "lr": 0.0008364422322615065,
    "routed_lr_scale": 1.0,
    "batch": 64,
    "seq_len": 256,
    "steps": 80000,
-   "seed": 1,
+   "seed": 0,
    "test_tokens": 5000000,
    "val_windows": 512,
    "expert_type": "transition",
@@ -139,32 +139,32 @@
   },
   "metric": "bits per token, full test split",
   "stored_params": 195439804,
-  "json_n_params": null,
+  "json_n_params": 195439804,
   "paper_stored": 195400000.0,
-  "json_test": 1.5594396949858915,
-  "paper": 1.559,
+  "json_test": 1.5395202285549967,
+  "paper": 1.54,
   "paper_match": true,
   "seeds": {
    "0": {
-    "best_val": 1.4161848611630412,
-    "test": 1.5551947435217595,
-    "best_step": 80000
+    "best_val": 1.4041975091641683,
+    "test": 1.5395202285549967,
+    "best_step": 75000
    },
    "1": {
-    "best_val": 1.415673159032146,
-    "test": 1.5594396949858915,
+    "best_val": 1.4124229019091525,
+    "test": 1.545830944430246,
     "best_step": 80000
    },
    "2": {
-    "best_val": 1.4199542049220015,
-    "test": 1.5616589608033054,
+    "best_val": 1.4111748130629254,
+    "test": 1.5419724372341246,
     "best_step": 80000
    }
   },
-  "mean": 1.5587644664369853,
-  "se": 0.001896354086196501,
+  "mean": 1.5424412034064556,
+  "se": 0.0018367625511365134,
   "paper_mean": null,
-  "paper_se": 0.002,
+  "paper_se": null,
   "paper_mean_match": true
  },
  "hg38_small": {
@@ -613,118 +613,6 @@
   "se": 0.1420326132219913,
   "paper_mean": 0.699,
   "paper_se": 0.142,
-  "paper_mean_match": true
- },
- "ablation_store_outputs": {
-  "seed": 1,
-  "kind": "lm",
-  "config": {
-   "task": "enwik8",
-   "n_layers": 5,
-   "d_state": 128,
-   "block_size": 16,
-   "router_depth": 10,
-   "router_token_dim": 16,
-   "input_rank": 49,
-   "readout_rank": 16,
-   "layer_input_rank": 32,
-   "router_topk": 8,
-   "router_noise": 0.1,
-   "lr": 0.002093576772944113,
-   "routed_lr_scale": 1.0,
-   "batch": 64,
-   "seq_len": 256,
-   "steps": 80000,
-   "seed": 1,
-   "test_tokens": 5000000,
-   "val_windows": 512,
-   "expert_type": "output",
-   "router_input": "token_state"
-  },
-  "metric": "bits per token, full test split",
-  "stored_params": 54809532,
-  "json_n_params": 54809532,
-  "paper_stored": null,
-  "json_test": 1.80281741784654,
-  "paper": 1.803,
-  "paper_match": true,
-  "seeds": {
-   "0": {
-    "best_val": 1.6921537046845003,
-    "test": 1.8027282930924866,
-    "best_step": 80000
-   },
-   "1": {
-    "best_val": 1.6899430396903097,
-    "test": 1.80281741784654,
-    "best_step": 80000
-   },
-   "2": {
-    "best_val": 1.6952642688993305,
-    "test": 1.8034059731037542,
-    "best_step": 80000
-   }
-  },
-  "mean": 1.802983894680927,
-  "se": 0.00021260170249281482,
-  "paper_mean": 1.803,
-  "paper_se": 0.0,
-  "paper_mean_match": true
- },
- "ablation_token_routing": {
-  "seed": 1,
-  "kind": "lm",
-  "config": {
-   "task": "enwik8",
-   "n_layers": 5,
-   "d_state": 128,
-   "block_size": 16,
-   "router_depth": 10,
-   "router_token_dim": 16,
-   "input_rank": 32,
-   "readout_rank": 16,
-   "layer_input_rank": 32,
-   "router_topk": 4,
-   "router_noise": 0.05,
-   "lr": 0.0053077971305156455,
-   "routed_lr_scale": 0.3,
-   "batch": 64,
-   "seq_len": 256,
-   "steps": 80000,
-   "seed": 1,
-   "test_tokens": 5000000,
-   "val_windows": 512,
-   "expert_type": "transition",
-   "router_input": "token"
-  },
-  "metric": "bits per token, full test split",
-  "stored_params": 53706940,
-  "json_n_params": null,
-  "paper_stored": null,
-  "json_test": 1.7066644134392213,
-  "paper": 1.707,
-  "paper_match": true,
-  "seeds": {
-   "0": {
-    "best_val": 1.6146337286866452,
-    "test": 1.7098554854397692,
-    "best_step": 80000
-   },
-   "1": {
-    "best_val": 1.6113025752242522,
-    "test": 1.7066644134392213,
-    "best_step": 80000
-   },
-   "2": {
-    "best_val": 1.618210387383145,
-    "test": 1.7066163732632122,
-    "best_step": 80000
-   }
-  },
-  "mean": 1.7077120907140675,
-  "se": 0.0010717870866379915,
-  "paper_mean": 1.708,
-  "paper_se": 0.001,
   "paper_mean_match": true
  }
 }

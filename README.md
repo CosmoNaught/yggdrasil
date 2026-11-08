@@ -2,24 +2,25 @@
 
 **Sparse Lookup of State Transitions**
 
-Yggdrasil is a recurrent sequence model that looks up its state transition by context instead of computing it. A token
-layer selects one expert per token, and each routed layer selects one of its 2^D experts through a depth-D tree router
-on the token and the state of the layer below, so stored transitions grow as 2^D while the work per token grows as D.
-Training is a parallel scan, and inference runs token by token in an int8 kernel on one CPU core.
+Yggdrasil is a recurrent sequence model that looks up its state transition instead of computing it.
+
+Mixtures of experts and memory layers read only a few of their stored parameters per token, but only in the layers that
+produce an output. The recurrence, where a model keeps its state, has stayed dense. Yggdrasil makes the recurrence itself
+sparse. Each layer stores 2^D transitions, and a binary tree router picks one per token from the token and the state of
+the layer below. Storage grows exponentially with the router depth D, while the work per token grows linearly. Training
+is a parallel scan, and inference runs one token at a time in an int8 kernel on a single CPU core.
 
 ## Highlights
 
-- **1.540 bits per byte on enwik8** and **1.567 bits per base on hg38** at 330k and 290k active parameters, against
-  1.724 and 1.637 for the best baselines.
-- **3.0× to 3.3× faster** on one CPU core than the fastest baseline with a streaming step, and **1.2× to 3.8× faster**
-  than the Transformer, Gated DeltaNet and HyenaDNA on a GPU at batch 1.
-- **Solves all five state-tracking tasks**, as only the sequentially trained GRU and LSTM do, and is the only
-  parallel-trainable model that solves cycle navigation.
-- **At least 162× faster** on one CPU core than dense models with the same stored parameters at 5M, and **at least
-  3,289×** at 730M.
-- Exact trackers of A5, S5 and every finite automaton. A token-addressed lookup of contractions cannot reset
-  conditionally, while one state-addressed routed layer can.
-- The price is memory: a 681.3 MB enwik8 model, against at most 1.5 MB per dense baseline.
+- **Lowest bits per token at every size** on enwik8 and the human genome: **1.540 bits per byte** and **1.567 bits per
+  base** at 330k and 290k active parameters, against 1.724 and 1.637 for the best baselines.
+- **Faster at batch 1:** 3.0× to 3.3× faster on one CPU core than the fastest baseline with a streaming step, and 1.2×
+  to 4.0× faster than the Transformer, Gated DeltaNet and HyenaDNA on a GPU.
+- **Solves all five state-tracking tasks**, the only parallel-trainable model to do so.
+- **162× to 13,566× faster** on one CPU core than dense models with the same stored parameters, and at least 3,289×
+  at 730M.
+- **Exact state in theory:** tracks S5 and A5 exactly, also in 8-bit integers, and every finite automaton.
+- **Trades memory for compute:** the largest enwik8 model is 681.3 MB, against at most 1.5 MB for the dense baselines.
 
 <p align="center"><img src="assets/architecture.png" width="520"></p>
 

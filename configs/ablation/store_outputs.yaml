@@ -1,4 +1,4 @@
-# enwik8 medium, routed experts store no transition (A_r = 0), input_rank 49 keeps the stored bytes, test 1.803
+# enwik8 medium, routed experts store no transition (A_r = 0), input_rank 49 keeps the stored bytes
 # data
 task: enwik8
 seq_len: 256
@@ -20,7 +20,7 @@ router_topk: 8
 router_noise: 0.1
 router_temperature: 0.5
 # optimisation
-seed: 1  # best validation seed; runs use 0, 1, 2
+seed: 1
 steps: 80000
 batch: 64
 lr: 0.002093576772944113

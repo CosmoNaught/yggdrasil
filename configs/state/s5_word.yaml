@@ -1,4 +1,4 @@
-# S5 word problem, test accuracy 1.000
+# S5 word problem
 # data
 task: s5_word
 # model
@@ -17,7 +17,7 @@ router_topk: 8
 router_noise: 0.05
 router_temperature: 0.5
 # optimisation
-seed: 160  # best validation seed; runs use 160, 161, 162
+seed: 160
 steps: 100000
 batch: 256
 lr: 0.005426263239689804

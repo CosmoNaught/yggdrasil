@@ -1,4 +1,4 @@
-# hg38 medium (90k active parameters), test 1.590 bits per base
+# hg38 medium (90k active parameters)
 # data
 task: hg38
 seq_len: 1024
@@ -20,7 +20,7 @@ router_topk: 8
 router_noise: 0.05
 router_temperature: 0.5
 # optimisation
-seed: 0  # best validation seed; runs use 0, 1, 2
+seed: 0
 steps: 80000
 batch: 16
 lr: 0.0007485080102483152

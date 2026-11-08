@@ -1,4 +1,4 @@
-# A5 word problem, test accuracy 0.980
+# A5 word problem
 # data
 task: a5_word
 # model
@@ -17,7 +17,7 @@ router_topk: 8
 router_noise: 0.0
 router_temperature: 0.5
 # optimisation
-seed: 162  # best validation seed; runs use 160, 161, 162
+seed: 162
 steps: 100000
 batch: 256
 lr: 0.006738857862246742

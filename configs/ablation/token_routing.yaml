@@ -1,4 +1,4 @@
-# enwik8 medium with routers that read the token only, test 1.707
+# enwik8 medium with routers that read the token only
 # data
 task: enwik8
 seq_len: 256
@@ -20,7 +20,7 @@ router_topk: 4
 router_noise: 0.05
 router_temperature: 0.5
 # optimisation
-seed: 1  # best validation seed; runs use 0, 1, 2
+seed: 1
 steps: 80000
 batch: 64
 lr: 0.0053077971305156455

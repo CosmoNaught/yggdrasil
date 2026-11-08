@@ -1,4 +1,4 @@
-# modular arithmetic, test accuracy 0.981
+# modular arithmetic
 # data
 task: modular_arithmetic
 # model
@@ -17,7 +17,7 @@ router_topk: 8
 router_noise: 0.1
 router_temperature: 0.5
 # optimisation
-seed: 161  # best validation seed; runs use 160, 161, 162
+seed: 161
 steps: 100000
 batch: 256
 lr: 0.0028440125932433264

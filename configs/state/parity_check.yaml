@@ -1,4 +1,4 @@
-# parity, test accuracy 1.000
+# parity
 # data
 task: parity_check
 # model
@@ -17,7 +17,7 @@ router_topk: 4
 router_noise: 0.1
 router_temperature: 0.5
 # optimisation
-seed: 160  # best validation seed; runs use 160, 161, 162
+seed: 160
 steps: 100000
 batch: 256
 lr: 0.003285765463500747

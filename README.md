@@ -22,7 +22,7 @@ is a parallel scan, and inference runs one token at a time in an int8 kernel on 
 - **Exact state in theory:** tracks S5 and A5 exactly, also in 8-bit integers, and every finite automaton.
 - **Trades memory for compute:** the largest enwik8 model is 681.3 MB, against at most 1.5 MB for the dense baselines.
 
-<p align="center"><img src="assets/architecture_ab.pdf" width="520"></p>
+<p align="center"><img src="assets/architecture_ab.png" width="520"></p>
 
 ## Results
 

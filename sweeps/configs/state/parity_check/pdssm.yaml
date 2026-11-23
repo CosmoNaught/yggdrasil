@@ -1,0 +1,18 @@
+name: pdssm-parity_check
+description: objective = validation final-answer accuracy, scaled to 0 at chance and 1 at perfect
+method: bayes
+metric: {name: objective, goal: maximize}
+run_cap: 8
+parameters:
+  model: {value: pdssm}
+  task: {value: parity_check}
+  steps: {value: 10000}
+  eval_every: {value: 2000}
+  seed: {value: 160}
+  lr: {distribution: log_uniform_values, min: 0.0005, max: 0.02}
+  weight_decay:
+    values: [0.0, 0.01, 0.1]
+  beta2:
+    values: [0.95, 0.99, 0.999]
+  layout:
+    values: [L1_d64, L2_d64, L4_d64, L1_d128, L2_d128, L4_d128, L1_d256, L2_d256]

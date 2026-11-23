@@ -27,12 +27,13 @@ perfect, on the state tasks.
 
 | Cell | Trial | Searched |
 |---|---|---|
-| enwik8, hg38, each size | 10k steps | `lr` log-uniform [5e-4, 2e-2], `weight_decay` {0, 0.01, 0.1}, `beta2` {0.95, 0.99, 0.999}; shape fixed by the size |
-| state tasks | 10k steps | the same, plus `n_layers` {1, 2, 4}, `d_model` {64, 128, 256}, `head_dim` {16, 32} (Transformer, Gated DeltaNet, DeltaProduct), `d_state` {16, 32, 64} (Mamba-2) |
+| enwik8, hg38, each size | 10k steps | `lr` log-uniform [5e-4, 2e-2], `weight_decay` {0, 0.01, 0.1}, `beta2` {0.95, 0.99, 0.999}; shape fixed by the size, plus `pkm_heads` {1, 2, 4} and `pkm_topk` {8, 16, 32} (`lr` up to 8e-2 for GRU on enwik8 small and hg38 small and medium, LSTM on enwik8 medium, Mamba-2 and Mamba-2 + PKM on enwik8 large and hg38 medium, Gated DeltaNet on enwik8 small and DeltaProduct-4 on enwik8 medium) |
+| state tasks | 10k steps | the same, plus `n_layers` {1, 2, 4}, `d_model` {64, 128, 256}, `head_dim` {16, 32} (Transformer, Gated DeltaNet, DeltaProduct), `d_state` {16, 32, 64} (Mamba-2); for PD-SSM one `layout` in place of `n_layers` and `d_model` |
 | S5, A5, wide (`*_wide.yaml`) | 40k steps | `lr` log-uniform [1e-4, 2e-2], `weight_decay` {0, 1e-6, 0.01, 0.1}, `beta2` as above, `n_layers` 1 to 4, one `layout` (Transformer, Mamba-2, Gated DeltaNet, DeltaProduct-2/4) |
 
 A `layout` such as `d384_h12_p32` sets `d_model` 384, `n_heads` 12 and `head_dim` 32; `d128_p16` (Mamba-2) sets
-`d_model` 128 and `head_dim` 16.
+`d_model` 128 and `head_dim` 16; `L2_d128` (PD-SSM) sets `n_layers` 2 and `d_model` 128, with 1, 2 or 4 layers at
+`d_model` 64 and 128 and 1 or 2 at 256.
 
 **Best trial.** Among the first 8 finished trials of a cell by start time, pooling its sweep with any top-up sweep
 that replaced crashed trials, the one with the highest objective, ties going to the lower final training loss. In the

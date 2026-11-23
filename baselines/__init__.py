@@ -7,7 +7,7 @@ import importlib
 
 MODULES = {"gru": "gru", "lstm": "lstm", "mamba2": "mamba2", "transformer": "transformer",
            "gated_deltanet": "gated_deltanet", "deltaproduct2": "deltaproduct", "deltaproduct4": "deltaproduct",
-           "hyenadna": "hyenadna"}
+           "hyenadna": "hyenadna", "mamba2_pkm": "mamba2_pkm", "pdssm": "pdssm"}
 
 
 def module(name):

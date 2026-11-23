@@ -257,6 +257,39 @@ def baseline_logits(name, task, fields, x, device, seed):
     return lg, sum(p.numel() for p in model.parameters())
 
 
+def baseline_grads(name, task, fields, x, device, seed):
+    """baselines.build as in baseline_logits, in training mode: next-token cross-entropy on tokens x (B, T), backward
+    -> (logits shape, names of the parameters without a finite gradient)."""
+    import torch
+    import baselines
+    fields = {BASELINE_FIELDS.get(k, k): v for k, v in fields.items() if k not in BASELINE_DROPPED}
+    torch.manual_seed(seed)
+    model = baselines.build({"model": name, "task": task, **fields}).to(device).float().train()
+    amp = getattr(baselines.module(name), "AMP", None)
+    x = torch.as_tensor(np.asarray(x, np.int64), device=device)
+    with torch.autocast(torch.device(device).type, dtype=amp or torch.float32, enabled=amp is not None):
+        lg = model(x)
+    torch.nn.functional.cross_entropy(lg[:, :-1].float().flatten(0, 1), x[:, 1:].flatten()).backward()
+    bad = [n for n, p in model.named_parameters() if p.grad is None or not torch.isfinite(p.grad).all()]
+    return tuple(lg.shape), bad
+
+
+def baseline_sizes(config):
+    """baselines.build(config) -> (stored, active) parameters. Active, as the paper counts them: stored minus the rows
+    of each token embedding that one token does not read and, in a product-key memory, minus the value rows it does
+    not read (heads x top-k rows are read)."""
+    import torch
+    import baselines
+    model = baselines.build(config)
+    stored = active = sum(p.numel() for p in model.parameters())
+    for m in model.modules():
+        if isinstance(m, torch.nn.Embedding):
+            active -= m.weight.numel() - m.weight.shape[1]
+        if hasattr(m, "knn") and hasattr(m, "values"):  # xlm HashingMemory
+            active -= m.values.weight.numel() - m.heads * m.knn * m.v_dim
+    return stored, active
+
+
 def state_task(name, seed):
     """tasks.get(name, seed): .sets[split] = (x, y, last, lengths), .batch(rng, size) -> (x, y, mask)."""
     import tasks

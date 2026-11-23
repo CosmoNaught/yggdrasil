@@ -14,7 +14,7 @@ parameters:
   n_layers: {value: 2}
   d_state: {value: 128}
   head_dim: {value: 32}
-  lr: {distribution: log_uniform_values, min: 0.0005, max: 0.02}
+  lr: {distribution: log_uniform_values, min: 0.0005, max: 0.08}
   weight_decay:
     values: [0.0, 0.01, 0.1]
   beta2:

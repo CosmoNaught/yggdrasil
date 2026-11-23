@@ -1,0 +1,41 @@
+{
+ "enwik8/small/mamba2_pkm.yaml": {
+  "stored": 16309576,
+  "active": 34120
+ },
+ "enwik8/medium/mamba2_pkm.yaml": {
+  "stored": 54305940,
+  "active": 101180
+ },
+ "enwik8/large/mamba2_pkm.yaml": {
+  "stored": 195710642,
+  "active": 330666
+ },
+ "hg38/small/mamba2_pkm.yaml": {
+  "stored": 15569160,
+  "active": 23560
+ },
+ "hg38/medium/mamba2_pkm.yaml": {
+  "stored": 52063836,
+  "active": 82116
+ },
+ "hg38/large/mamba2_pkm.yaml": {
+  "stored": 188120842,
+  "active": 285194
+ },
+ "state/s5_word/pdssm.yaml": {
+  "stored": 1350776
+ },
+ "state/a5_word/pdssm.yaml": {
+  "stored": 340028
+ },
+ "state/parity_check/pdssm.yaml": {
+  "stored": 332546
+ },
+ "state/cycle_navigation/pdssm.yaml": {
+  "stored": 331013
+ },
+ "state/modular_arithmetic/pdssm.yaml": {
+  "stored": 166981
+ }
+}

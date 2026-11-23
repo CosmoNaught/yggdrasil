@@ -12,7 +12,7 @@ parameters:
   seed: {value: 0}
   d_model: {value: 48}
   n_layers: {value: 2}
-  lr: {distribution: log_uniform_values, min: 0.0005, max: 0.02}
+  lr: {distribution: log_uniform_values, min: 0.0005, max: 0.08}
   weight_decay:
     values: [0.0, 0.01, 0.1]
   beta2:

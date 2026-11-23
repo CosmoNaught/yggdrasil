@@ -1,0 +1,16 @@
+# hg38, large (290k active parameters): test 1.598 bits per base, seed 0 (best by validation of seeds 0, 1, 2)
+# search: W&B sweep cosmosantoni-/yggdrasil-dna/7uh0556y, best trial q9lnedwk; final run in99tcps
+model: mamba2_pkm
+task: hg38
+seed: 0
+d_model: 88
+n_layers: 2
+d_state: 128
+head_dim: 16
+pkm_keys: 1461
+pkm_heads: 1
+pkm_topk: 32
+pkm_qdim: 88
+lr: 0.0010297906487407428
+beta2: 0.99
+weight_decay: 0.1

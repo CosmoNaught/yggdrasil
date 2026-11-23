@@ -13,7 +13,7 @@ is a parallel scan, and inference runs one token at a time in an int8 kernel on 
 ## Highlights
 
 - **Lowest bits per token at every size** on enwik8 and the human genome: **1.540 bits per byte** and **1.567 bits per
-  base** at 330k and 290k active parameters, against 1.724 and 1.637 for the best baselines.
+  base** at 330k and 290k active parameters, against 1.673 and 1.598 for the best baselines.
 - **Faster at batch 1:** 3.0× to 3.3× faster on one CPU core than the fastest baseline with a streaming step, and 1.2×
   to 4.0× faster than the Transformer, Gated DeltaNet and HyenaDNA on a GPU.
 - **Solves all five state-tracking tasks**, the only parallel-trainable model to do so.
@@ -37,6 +37,7 @@ bits per byte on the full test split, the seed with the best validation score. B
 | | LSTM | 368.0k | 333.3k | 1.5 | 23.7 | 125.3 | 1.869 |
 | Parallel | Transformer | 373.3k | 344.7k | 0.5 | 130.0 | 224.4 | 1.796 |
 | | Mamba-2 | 335.8k | 303.2k | 1.2 | 43.0 | **43.8** | 1.896 |
+| | Mamba-2 + PKM | 195.7M | 330.7k | – | – | – | 1.673 |
 | | Gated DeltaNet | 348.9k | 324.4k | – | – | 125.5 | 1.727 |
 | | DeltaProduct-2 | 373.6k | 351.2k | – | – | 179.9 | 1.724 |
 | | DeltaProduct-4 | 331.4k | 311.0k | – | – | 162.0 | 1.740 |
@@ -54,6 +55,7 @@ the best validation score. Bold marks a solved task (accuracy ≥ 0.90).
 | | Gated DeltaNet | 0.018 | **0.999** | **0.999** | 0.615 | 0.826 |
 | | DeltaProduct-2 | 0.688 | **0.999** | **1.000** | 0.713 | **1.000** |
 | | DeltaProduct-4 | **0.935** | **1.000** | **1.000** | 0.684 | **1.000** |
+| | PD-SSM | 0.009 | 0.020 | 0.807 | **0.986** | **1.000** |
 | | Yggdrasil | **1.000** | **0.980** | **1.000** | **1.000** | **0.981** |
 
 **Speed at equal stored parameters.** CPU time of Yggdrasil per token and its speedup over each dense model with the
@@ -173,4 +175,5 @@ checkpoints from `$YGG_RUNS`.
 
 ## Licence
 
-MIT, see `LICENSE`. Code under `baselines/third_party/` keeps its own licence.
+MIT, see `LICENSE`. Code under `baselines/third_party/` keeps its own licence. Mamba-2 + PKM uses the product-key
+memory of `xlm` (CC BY-NC 4.0), which `[baselines]` installs from its repository; it is not included here.

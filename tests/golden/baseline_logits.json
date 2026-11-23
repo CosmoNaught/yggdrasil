@@ -177,5 +177,39 @@
   "n_params": 261056,
   "device": "NVIDIA RTX A5000",
   "torch": "2.10.0+cu128"
+ },
+ "mamba2_pkm/cuda": {
+  "task": "s5_word",
+  "fields": {
+   "d": 64,
+   "layers": 2,
+   "state": 16,
+   "head_dim": 16,
+   "pkm_keys": 32,
+   "pkm_heads": 2,
+   "pkm_topk": 8,
+   "pkm_qdim": 32
+  },
+  "seed": 0,
+  "vocab": 120,
+  "classes": 120,
+  "amp": "None",
+  "n_params": 140496,
+  "device": "NVIDIA L40S",
+  "torch": "2.10.0+cu128"
+ },
+ "pdssm/cuda": {
+  "task": "s5_word",
+  "fields": {
+   "d": 64,
+   "layers": 2
+  },
+  "seed": 0,
+  "vocab": 120,
+  "classes": 120,
+  "amp": "None",
+  "n_params": 181624,
+  "device": "NVIDIA L40S",
+  "torch": "2.10.0+cu128"
  }
 }

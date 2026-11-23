@@ -24,7 +24,7 @@ jax = ["jax==0.11.2", "optax==0.2.8", "scipy==1.18.1"]
 gpu = ["torch==2.10.0", "triton==3.6.0", "jax==0.11.2", "scipy==1.18.1"]
 # Baseline model code. torch comes from https://download.pytorch.org/whl/cu128, and mamba-ssm and causal-conv1d
 # compile against the installed torch, so install torch first and the rest with --no-build-isolation. xlm holds the
-# product-key memory of Mamba-2 + PKM; it is CC BY-NC 4.0, so it is installed from its repository, not included here.
+# product-key memory of Mamba-2 + PKM, installed from its repository.
 baselines = [
     "torch==2.10.0",
     "mamba-ssm==2.3.0",

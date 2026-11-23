@@ -1,4 +1,4 @@
-# Yggdrasil
+# Yggdrasil: Tree-Routed Recurrent Experts for State Tracking and Fast CPU Inference
 
 **Sparse Lookup of State Transitions**
 
@@ -186,5 +186,4 @@ checkpoints from `$YGG_RUNS`.
 
 ## Licence
 
-MIT, see `LICENSE`. Code under `baselines/third_party/` keeps its own licence. Mamba-2 + PKM uses the product-key
-memory of `xlm` (CC BY-NC 4.0), which `[baselines]` installs from its repository; it is not included here.
+MIT, see `LICENSE`. Code under `baselines/third_party/` keeps its own licence.

@@ -2,25 +2,36 @@
 
 **Sparse Lookup of State Transitions**
 
-Yggdrasil is a recurrent sequence model that looks up its state transition instead of computing it.
+**TL;DR:** Yggdrasil looks up each layer's state transition in a tree-routed bank of recurrent experts. It tracks
+state like an LSTM, trains as a parallel scan like Mamba, takes the fastest step of all models on one CPU core, and
+delivers the highest GPU throughput of all models at batch 1024.
 
-Mixtures of experts and memory layers read only a few of their stored parameters per token, but only in the layers that
-produce an output. The recurrence, where a model keeps its state, has stayed dense. Yggdrasil makes the recurrence itself
-sparse. Each layer stores 2^D transitions, and a binary tree router picks one per token from the token and the state of
-the layer below. Storage grows exponentially with the router depth D, while the work per token grows linearly. Training
-is a parallel scan, and inference runs one token at a time in an int8 kernel on a single CPU core.
+## Abstract
+
+Parallel-trainable recurrences such as Mamba, linear attention, and DeltaNet offer constant-cost streaming inference,
+but they suffer from two limitations: 1) they struggle to track discrete state, and 2) they read every parameter at
+every step, tying model capacity directly to CPU latency. We introduce Yggdrasil, a recurrent architecture that
+decouples capacity from per-step compute by looking up each layer's transition in a large, tree-routed bank of
+recurrent experts. Each router addresses its bank using the current token and the state of the layer below. We prove
+that this cross-layer context is necessary—a single token-indexed layer of non-expanding transitions with finitely
+many reachable states cannot perform conditional resets—while avoiding feedback from the layer's own past preserves
+parallel-scan training. Because each step traverses one tree path and reads a single expert per layer, active weights
+stay within a few hundred kilobytes in CPU L2 cache while the full bank resides in RAM. Among the parallel-trainable
+models we evaluate, Yggdrasil is the only one to solve all five state-tracking tasks. At matched active parameter
+counts, it achieves the lowest test bits on enwik8 (1.540 bits per byte) and the human genome hg38 (1.567 bits per
+base), while stepping 3.0× and 3.3× faster on a single CPU core (6.7 µs and 5.8 µs) than the fastest streaming
+baseline, and delivering the highest GPU throughput of all models at batch 1024. On the Genomic Benchmarks, it is the
+strongest causal model at matched active parameters (86.0% mean accuracy).
 
 ## Highlights
 
-- **Lowest bits per token at every size** on enwik8 and the human genome: **1.540 bits per byte** and **1.567 bits per
-  base** at 330k and 290k active parameters, against 1.673 and 1.598 for the best baselines.
-- **Faster at batch 1:** 3.0× to 3.3× faster on one CPU core than the fastest baseline with a streaming step, and 1.2×
-  to 4.0× faster than the Transformer, Gated DeltaNet and HyenaDNA on a GPU.
 - **Solves all five state-tracking tasks**, the only parallel-trainable model to do so.
-- **162× to 13,566× faster** on one CPU core than dense models with the same stored parameters, and at least 3,289×
-  at 730M.
-- **Exact state in theory:** tracks S5 and A5 exactly, also in 8-bit integers, and every finite automaton.
-- **Trades memory for compute:** the largest enwik8 model is 681.3 MB, against at most 1.5 MB for the dense baselines.
+- **Lowest bits at every matched size** on enwik8 and the human genome: **1.540 bits per byte** and **1.567 bits per
+  base** at 330k and 290k active parameters, against 1.673 and 1.598 for the best baselines.
+- **Fastest on one CPU core:** 3.0× and 3.3× faster (6.7 µs and 5.8 µs per token) than the fastest streaming baseline.
+- **Highest GPU throughput** of all models at batch 1024, at every size.
+- **Strongest causal model on the Genomic Benchmarks** at matched active parameters (86.0% mean accuracy).
+- **162× to 13,566× faster** on one CPU core than dense models with the same stored parameters.
 
 <p align="center"><img src="assets/architecture_ab.png" width="520"></p>
 

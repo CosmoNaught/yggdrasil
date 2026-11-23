@@ -12,10 +12,11 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from . import routed
 from .config import RMS_EPS, upgrade_keys
 from .experts import expert_bank, transitions
 from .router import route
-from .scan import scan
+from .scan import MIN_BATCH, expert_scan, scan
 
 # in case jax was imported before the package set the variable
 jax.config.update("jax_default_matmul_precision", os.environ["JAX_DEFAULT_MATMUL_PRECISION"])
@@ -119,6 +120,32 @@ def layer(p, expert, w, xs, below, h0=None, transition=True):
     return scan(abar, drive.reshape(abar.shape[:-1]), h0).reshape(drive.shape)
 
 
+def _use_kernels(p, xs, below):
+    """The expert matmuls and the scan run as GPU kernels (routed.py, scan.expert_scan) for the shapes they take."""
+    widths = p["input_proj"].shape[1:] + p["readout"].shape[1:2]
+    if below is not None:
+        widths += p["layer_input_proj"].shape[2:]
+    return jax.default_backend() == "gpu" and xs.shape[1] >= MIN_BATCH and routed.fits(*widths)
+
+
+def layer_kernels(p, expert, w, xs, below, h0=None, transition=True):
+    """layer, and the readout sum_q w_q P_r h (T, B, readout_rank), as kernels that read the experts by id, so no
+    per-token copy of U_r, A_r or P_r is formed. The values and gradients are those of layer and the gathers in
+    forward: the weights w are one-hot on slot 0 in value, so slot 0 gives the drive, A_r and P_r h, and the
+    gradients reach the experts through slot 0 and the weights through every slot."""
+    T, B, k = expert.shape
+    n_experts, d = p["bias"].shape
+    pln, wf = routed.plan(expert.reshape(T * B, k), n_experts), w.reshape(T * B, k)
+    xs_in, ws = (p["token_embed"][xs],), (p["input_proj"],)
+    if below is not None:
+        xs_in, ws = xs_in + (below @ p["layer_input_down"].T,), ws + (p["layer_input_proj"],)
+    h = routed.routed_mm(tuple(a.reshape(T * B, -1) for a in xs_in), ws, wf, pln, p["bias"]).reshape(T, B, d)
+    if transition:
+        a = transitions(p)
+        h = expert_scan(a, expert, w, h.reshape((T, B) + a.shape[1:-1]), h0).reshape(T, B, d)
+    return h, routed.routed_mm(h.reshape(T * B, d), p["readout"], wf, pln).reshape(T, B, -1)
+
+
 def _routed_experts(p, i, xs, below, cfg, mode, key):
     """Router of routed layer i -> expert ids, weights (T, B, k)."""
     f = p["router_embed"][xs]
@@ -144,10 +171,15 @@ def forward(params, tokens, cfg, mode="hard", key=None, state=None):
             expert, w = _routed_experts(p, i, xs, below, cfg, mode, key)
         layer_input = below if _has_layer_input(i, cfg) else None
         h0 = None if state is None else state[i]
-        h = layer(p, expert, w, xs, layer_input, h0, _has_transition(i, cfg))
+        if _use_kernels(p, xs, layer_input):
+            h, readout = layer_kernels(p, expert, w, xs, layer_input, h0, _has_transition(i, cfg))
+        else:
+            h, readout = layer(p, expert, w, xs, layer_input, h0, _has_transition(i, cfg)), None
         last.append(h[-1])
         below = rms(h)
-        logits = logits + jnp.einsum("tbq,tbqrk,tbk->tbr", w, p["readout"][expert], h) @ p["unembed"].T
+        if readout is None:  # after rms(h), as the CPU goldens were traced
+            readout = jnp.einsum("tbq,tbqrk,tbk->tbr", w, p["readout"][expert], h)
+        logits = logits + readout @ p["unembed"].T
     return jnp.swapaxes(jax.nn.log_softmax(logits, -1), 0, 1), last
 
 

@@ -2,13 +2,15 @@
 import jax
 import jax.numpy as jnp
 
+from . import expm
 from .config import EXPERT_KEYS
 
 
 def transitions(p):
     """A_r = diag(clip(decay_r)) blockdiag(expm((S_r - S_r^T) / 2)) -> (E, d_state / b, b, b), b = block_size."""
     gen = 0.5 * (p["rotation"] - jnp.swapaxes(p["rotation"], -1, -2))
-    return jnp.clip(p["decay"], -1.0, 1.0).reshape(gen.shape[:-1])[..., None] * jax.scipy.linalg.expm(gen)
+    rot = expm.expm(gen) if expm.fits(gen) else jax.scipy.linalg.expm(gen)  # same algorithm, one kernel on a GPU
+    return jnp.clip(p["decay"], -1.0, 1.0).reshape(gen.shape[:-1])[..., None] * rot
 
 
 def to_hre(p, depth):

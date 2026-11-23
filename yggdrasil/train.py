@@ -18,6 +18,7 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
+from . import adam
 from .config import KEY_ALIASES, parse
 from .data import build_task
 from .experts import materialize, to_hre
@@ -61,18 +62,34 @@ def clip_by_global_norm(max_norm):
     return optax.GradientTransformation(lambda params: optax.EmptyState(), update)
 
 
-def build_optimizer(cfg):
-    """Adam with global-norm clipping, linear warm-up and cosine decay; skips non-finite updates."""
+def schedule(cfg):
+    """Linear warm-up and cosine decay."""
     warmup = round(cfg.warmup_frac * cfg.steps)
-    sched = optax.warmup_cosine_decay_schedule(0.0, cfg.lr, warmup, cfg.steps, cfg.lr * cfg.final_lr_frac)
-    return optax.apply_if_finite(optax.chain(clip_by_global_norm(cfg.grad_clip), optax.adam(sched)), MAX_NONFINITE)
+    return optax.warmup_cosine_decay_schedule(0.0, cfg.lr, warmup, cfg.steps, cfg.lr * cfg.final_lr_frac)
+
+
+def build_optimizer(cfg):
+    """Adam with global-norm clipping and the schedule; skips non-finite updates."""
+    return optax.apply_if_finite(optax.chain(clip_by_global_norm(cfg.grad_clip), optax.adam(schedule(cfg))),
+                                 MAX_NONFINITE)
 
 
 def make_train_step(cfg, opt):
-    """-> jitted step(params, opt_state, x, y, m, key) -> params, opt_state, loss, gradient norm before clipping."""
+    """-> jitted step(params, opt_state, x, y, m, key) -> params, opt_state, loss, gradient norm before clipping.
+
+    On a GPU the update is adam.step: the same update in place (params and state donated), from the gradients of the
+    per-expert arrays.
+    """
     def loss_fn(p, x, y, m, key):
         logp, _ = forward(p, x, cfg, "st", key)
         return -(jnp.take_along_axis(logp, y[..., None], -1)[..., 0] * m / m.sum()).sum()
+
+    if jax.default_backend() == "gpu":
+        def fused_step(p, s, x, y, m, key):
+            loss, g = jax.value_and_grad(loss_fn)(materialize(p), x, y, m, key)
+            p, s, g_norm = adam.step(p, g, s, schedule(cfg), cfg.grad_clip, MAX_NONFINITE, cfg.routed_lr_scale)
+            return p, s, loss, g_norm
+        return jax.jit(fused_step, donate_argnums=(0, 1))
 
     def step(p, s, x, y, m, key):
         loss, g = jax.value_and_grad(loss_fn)(p, x, y, m, key)

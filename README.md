@@ -33,7 +33,7 @@ strongest causal model at matched active parameters (86.0% mean accuracy).
 - **Strongest causal model on the Genomic Benchmarks** at matched active parameters (86.0% mean accuracy).
 - **162× to 13,566× faster** on one CPU core than dense models with the same stored parameters.
 
-<p align="center"><img src="assets/architecture_ab.png" width="520"></p>
+<p align="center"><img src="assets/architecture_ab.png" width="900"></p>
 
 ## Results
 

@@ -177,7 +177,7 @@ checkpoints from `$YGG_RUNS`.
 
 ```bibtex
 @article{santoni2026yggdrasil,
-  title   = {Yggdrasil: Sparse Lookup of State Transitions},
+  title   = {Yggdrasil: Tree-Routed Recurrent Experts for State Tracking and Fast CPU Inference},
   author  = {Santoni, Cosmo},
   journal = {arXiv preprint},
   year    = {2026}

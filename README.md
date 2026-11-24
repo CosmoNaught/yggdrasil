@@ -48,7 +48,7 @@ bits per byte on the full test split, the seed with the best validation score. B
 | | LSTM | 368.0k | 333.3k | 1.5 | 23.7 | 125.3 | 1.869 |
 | Parallel | Transformer | 373.3k | 344.7k | 0.5 | 130.0 | 224.4 | 1.796 |
 | | Mamba-2 | 335.8k | 303.2k | 1.2 | 43.0 | **43.8** | 1.896 |
-| | Mamba-2 + PKM | 195.7M | 330.7k | – | – | – | 1.673 |
+| | Mamba-2 + PKM | 195.7M | 330.7k | – | – | 219.1 | 1.673 |
 | | Gated DeltaNet | 348.9k | 324.4k | – | – | 125.5 | 1.727 |
 | | DeltaProduct-2 | 373.6k | 351.2k | – | – | 179.9 | 1.724 |
 | | DeltaProduct-4 | 331.4k | 311.0k | – | – | 162.0 | 1.740 |
